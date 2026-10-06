@@ -367,6 +367,10 @@ class DiPlayActivity : ComponentActivity() {
             buttonRow.addView(settingsBtn, LinearLayout.LayoutParams(0, dp(38), 1f))
             card.addView(buttonRow)
 
+            card.addView(button(getString(R.string.carlife_channel_title), false) {
+                startActivity(Intent(this, com.shilapi.xcertplay.carlife.CarLifeVideoActivity::class.java))
+            }.apply { setPadding(0, dp(8), 0, 0) }, matchButton(8, 38))
+
             disconnectButton = button(getString(R.string.disconnect), false) {
                 disconnectButton?.isEnabled = false
                 CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
@@ -430,6 +434,9 @@ class DiPlayActivity : ComponentActivity() {
         }
         right.addView(button(getString(R.string.connect_with_usb), false) { connect(false) }, matchButton())
         right.addView(label(getString(R.string.plug_your_iphone_into_a_usb_data_port_allow_carplay_when_y), 14, MUTED).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(10), dp(8), dp(24)) })
+        right.addView(button(getString(R.string.carlife_channel_title), false) {
+            startActivity(Intent(this, com.shilapi.xcertplay.carlife.CarLifeVideoActivity::class.java))
+        }, matchButton())
         right.addView(button(getString(R.string.settings), false) { page = "settings"; render() }, matchButton())
         right.addView(label(getString(R.string.make_diplay_feel_right_for_your_car), 14, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(24)) })
         right.addView(label("${getString(R.string.home_public_preview)}${version()}", 12, MUTED).apply { letterSpacing = .08f })

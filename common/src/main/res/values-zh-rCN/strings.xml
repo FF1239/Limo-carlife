@@ -690,4 +690,19 @@
     <string name="update_downloading">正在下载更新…</string>
     <string name="update_install_failed">未能打开安装器。请允许 DiPlay 安装未知应用后重试。</string>
     <string name="update_allow_unknown">在刚打开的页面允许 DiPlay 安装未知应用，返回后自动继续安装。</string>
+
+    <!-- CarLife 通道 -->
+    <string name="carlife_channel_title">CarLife 通道</string>
+    <string name="carlife_connecting">正在连接 CarLife…</string>
+    <string name="carlife_projecting">CarLife 投屏中</string>
+    <string name="carlife_disconnected">CarLife 已断开（%1$s）</string>
+    <string name="carlife_state">CarLife：%1$s</string>
+    <string name="carlife_wired_connect">有线（USB）</string>
+    <string name="carlife_wireless_connect">无线连接</string>
+    <string name="carlife_wireless_need_same_network">请让车机与手机处于同一 Wi-Fi 网络，在手机 CarLife 应用中点击「无线连接」后再搜索。</string>
+    <string name="carlife_searching_phone">正在搜索 CarLife 手机…</string>
+    <string name="carlife_phone_found">已找到手机：%1$s</string>
+    <string name="carlife_phone_not_found">未在同一网络中找到 CarLife 手机。</string>
+    <string name="carlife_stop">停止 CarLife</string>
+    <string name="carlife_wireless_mode">无线连接</string>
 </resources>
