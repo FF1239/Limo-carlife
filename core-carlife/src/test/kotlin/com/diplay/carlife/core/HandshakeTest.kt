@@ -22,6 +22,12 @@ class HandshakeTest {
             versionMatchStatus = matchStatus
         }
 
+        override fun onAuthenResponse(response: CarLifeMessages.AuthenResponse) = Unit
+
+        override fun onMicRecordStart() = Unit
+
+        override fun onMicRecordEnd() = Unit
+
         override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) = Unit
         override fun onVideoEncoderInitDone(info: CarLifeMessages.VideoEncoderInfo) {
             encoderInitDone = info

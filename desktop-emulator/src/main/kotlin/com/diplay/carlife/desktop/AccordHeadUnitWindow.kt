@@ -18,6 +18,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingConstants
 import javax.swing.WindowConstants
+import kotlin.concurrent.thread
 
 /**
  * 2025 Accord mid-trim head-unit form: 12.3" 1920x720 landscape touch screen.
@@ -164,6 +165,8 @@ class AccordHeadUnitWindow {
         }
         private val logFile = java.io.PrintWriter(java.io.FileWriter("D:\\dev-tools\\hu-session.log", true))
 
+        private var rsaPrivate: java.security.PrivateKey? = null
+
         private fun slog(line: String) {
             synchronized(logFile) {
                 logFile.println("[${java.time.LocalTime.now()}] $line")
@@ -175,9 +178,10 @@ class AccordHeadUnitWindow {
         override fun onPhase(phase: CarLifeSession.Phase) {
             slog("phase=$phase")
             status("阶段: $phase")
-            // After feature negotiation the HU proposes the video encoder
-            // (official 7-phase order, steps 5 → 6).
-            if (phase == CarLifeSession.Phase.FEATURE_CONFIG) {
+            // Fallback path: if the phone runs the reference negotiation
+            // (FEATURE_CONFIG_REQUEST first), answer it here once.
+            if (phase == CarLifeSession.Phase.FEATURE_CONFIG && !encoderProposed) {
+                encoderProposed = true
                 session?.sendFeatureConfigResponse(
                     listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
                 )
@@ -190,9 +194,8 @@ class AccordHeadUnitWindow {
             status("协议版本匹配: $matchStatus — 继续认证")
             if (matchStatus == 1) {
                 session?.sendAuthenRequest()
-                session?.sendAuthenResult(true)
-                // The MD answers with its MD_INFO + FEATURE_CONFIG_REQUEST only
-                // after the HU introduces itself (official order, steps 2→5).
+                // AUTHEN_RESULT goes out only after the phone's AUTHEN_RESPONSE
+                // (strict 4-step order), then HU_INFO triggers feature negotiation.
                 session?.sendHuInfo(
                     CarLifeMessages.DeviceInfo(
                         os = "android",
@@ -205,6 +208,48 @@ class AccordHeadUnitWindow {
                     ),
                 )
             }
+        }
+
+        override fun onAuthenResponse(response: CarLifeMessages.AuthenResponse) {
+            slog("authen response received (${response.encryptValue.length}B) → send result")
+            session?.sendAuthenResult(true)
+            // Real CarLife may never send FEATURE_CONFIG_REQUEST — the HU owns
+            // the feature answer and the encoder proposal (steps 5→6).
+            if (!encoderProposed) {
+                encoderProposed = true
+                session?.sendFeatureConfigResponse(
+                    listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
+                )
+                session?.sendVideoEncoderInit(1280, 480, 30)
+            }
+        }
+
+        private var encoderProposed = false
+
+        private var micThread: Thread? = null
+
+        /**
+         * Real CarLife stalls until the HU streams VR mic audio after
+         * MIC_RECORD_WAKEUP_START. The desktop HU sends silence (16kHz mono
+         * 16-bit, 1KB packets as the reference does) to keep the state machine
+         * moving; a real unit would capture its microphone here.
+         */
+        override fun onMicRecordStart() {
+            slog("mic record start → streaming silence on VR")
+            if (micThread?.isAlive == true) return
+            micThread = thread(name = "hu-vr-silence") {
+                val silence = ByteArray(1024)
+                while (!Thread.currentThread().isInterrupted) {
+                    session?.sendVrData(silence)
+                    Thread.sleep(32)
+                }
+            }
+        }
+
+        override fun onMicRecordEnd() {
+            slog("mic record end")
+            micThread?.interrupt()
+            micThread = null
         }
 
         override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {
@@ -223,6 +268,9 @@ class AccordHeadUnitWindow {
         override fun onVideoData(timestamp: Long, h264: ByteArray) {
             bytesCount[0] += h264.size
             msgCount[0]++
+            if (msgCount[0] % 30 == 1L) {
+                slog("video pkt#${msgCount[0]} ${h264.size}B total=${bytesCount[0] / 1024}KB")
+            }
             decoder.feed(h264)
         }
 
@@ -273,12 +321,21 @@ class AccordHeadUnitWindow {
         }
 
         override fun onRsaPublicKeyRequest() {
-            // Open-source reference HU behaviour: reply with the demo key flow.
-            session?.sendRsaPublicKey("")
+            slog("RSA pubkey requested — serving generated key")
+            val (pub, priv) = RsaCrypto.ensureKeyPair()
+            rsaPrivate = priv
+            session?.sendRsaPublicKey(pub)
         }
 
         override fun onAesKeyDelivered(encryptedKey: String) {
-            println("[encrypt] phone delivered AES key (RSA-wrapped)")
+            val key = rsaPrivate?.let { RsaCrypto.decrypt(it, encryptedKey) }
+            slog("AES key delivered, decrypted=${key != null} len=${key?.length ?: 0}")
+            javax.swing.JOptionPane.showMessageDialog(
+                null,
+                "真实 CarLife 请求加密会话,已交付 AES 密钥。加密流解密尚未实现——画面可能无法显示。",
+                "CarLife 加密握手",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE,
+            )
         }
     }
 }

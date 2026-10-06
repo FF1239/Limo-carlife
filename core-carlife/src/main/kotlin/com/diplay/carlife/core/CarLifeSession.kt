@@ -22,6 +22,15 @@ class CarLifeSession(
 
         fun onVersionMatch(matchStatus: Int)
 
+        /** The phone answered the authen challenge; HU should send its result now. */
+        fun onAuthenResponse(response: CarLifeMessages.AuthenResponse)
+
+        /** Phone started the VR mic session (MIC_RECORD_WAKEUP_START / RECOG_START). */
+        fun onMicRecordStart()
+
+        /** Phone ended the VR mic session (MIC_RECORD_END). */
+        fun onMicRecordEnd()
+
         fun onMobileInfo(info: CarLifeMessages.DeviceInfo)
 
         fun onVideoEncoderInitDone(info: CarLifeMessages.VideoEncoderInfo)
@@ -76,6 +85,10 @@ class CarLifeSession(
     @Volatile
     var phase: Phase = Phase.IDLE
         private set
+
+    /** Optional hook: every CMD service type seen, for diagnostics. */
+    @Volatile
+    var cmdLogger: ((serviceType: Int, payloadLen: Int) -> Unit)? = null
 
     // ---- Send side ----
 
@@ -225,6 +238,7 @@ class CarLifeSession(
     }
 
     private fun dispatchCmd(serviceType: Long, payload: ByteArray) {
+        cmdLogger?.invoke(serviceType.toInt(), payload.size)
         when (serviceType.toInt()) {
             CarLife.Cmd.PROTOCOL_VERSION_MATCH_STATUS -> {
                 val s = CarLifeMessages.ProtocolVersionMatchStatus.decode(payload)
@@ -233,7 +247,10 @@ class CarLifeSession(
                 listener.onVersionMatch(s.matchStatus)
             }
             CarLife.Cmd.MD_INFO -> listener.onMobileInfo(CarLifeMessages.DeviceInfo.decode(payload))
-            CarLife.Cmd.MD_AUTHEN_RESPONSE -> phase = Phase.FEATURE_CONFIG
+            CarLife.Cmd.MD_AUTHEN_RESPONSE -> {
+                phase = Phase.FEATURE_CONFIG
+                listener.onAuthenResponse(CarLifeMessages.AuthenResponse.decode(payload))
+            }
             CarLife.Cmd.MD_FEATURE_CONFIG_REQUEST -> {
                 phase = Phase.FEATURE_CONFIG
                 listener.onPhase(phase)
@@ -249,6 +266,9 @@ class CarLifeSession(
                 listener.onNaviNextTurnInfo(CarLifeMessages.NaviNextTurnInfo.decode(payload))
             CarLife.Cmd.ERROR_CODE -> listener.onErrorCode(CarLifeMessages.ErrorCode.decode(payload))
             CarLife.Cmd.BACKGROUND -> listener.onBackground()
+            CarLife.Cmd.MIC_RECORD_WAKEUP_START, CarLife.Cmd.MIC_RECORD_RECOG_START ->
+                listener.onMicRecordStart()
+            CarLife.Cmd.MIC_RECORD_END -> listener.onMicRecordEnd()
             CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> listener.onRsaPublicKeyRequest()
             CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> listener.onAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
         }

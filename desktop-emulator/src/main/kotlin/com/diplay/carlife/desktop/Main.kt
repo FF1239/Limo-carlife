@@ -53,7 +53,12 @@ fun main(args: Array<String>) {
         }
     })
 
-    session = CarLifeSession(client, pipe).also { pipe.session = it }
+    session = CarLifeSession(client, pipe).also {
+        pipe.session = it
+        it.cmdLogger = { type, len ->
+            println(String.format("[cmd] 0x%08X (%dB)", type, len))
+        }
+    }
 
     window.show()
     window.installTouchInput()
