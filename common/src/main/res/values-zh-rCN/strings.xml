@@ -706,4 +706,6 @@
     <string name="carlife_stop">停止 CarLife</string>
     <string name="carlife_wireless_mode">无线连接</string>
     <string name="carlife_settings_button">设置</string>
+    <string name="carlife_manual_ip_button">IP 连接</string>
+    <string name="carlife_manual_ip_hint">无线模式填手机 IP;同机自测填 127.0.0.1(连接本机上的 CarLife 应用)。</string>
 </resources>

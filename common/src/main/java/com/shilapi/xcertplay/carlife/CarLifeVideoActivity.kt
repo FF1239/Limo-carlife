@@ -140,6 +140,19 @@ class CarLifeVideoActivity : Activity() {
             }
         }
 
+        val manualIpButton = Button(this).apply {
+            text = getString(R.string.carlife_manual_ip_button)
+            textSize = 13f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                cornerRadius = 20.dp.toFloat()
+                setColor(0x80000000.toInt())
+            }
+            setPadding(24.dp, 10.dp, 24.dp, 10.dp)
+            setOnClickListener { promptForIp() }
+        }
+
         status = TextView(this).apply {
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
@@ -165,6 +178,8 @@ class CarLifeVideoActivity : Activity() {
                     addView(settingsButton)
                     addView(View(this@CarLifeVideoActivity), FrameLayout.LayoutParams(12.dp, 1))
                     addView(wirelessButton)
+                    addView(View(this@CarLifeVideoActivity), FrameLayout.LayoutParams(12.dp, 1))
+                    addView(manualIpButton)
                 },
                 FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM),
             )
@@ -182,6 +197,35 @@ class CarLifeVideoActivity : Activity() {
             )
         })
         showStatus(getString(R.string.carlife_connecting))
+    }
+
+    /** Manual target: same-phone self-test uses 127.0.0.1 (local CarLife). */
+    private fun promptForIp() {
+        val input = android.widget.EditText(this).apply {
+            setText("127.0.0.1")
+            hint = "192.168.x.x / 127.0.0.1"
+            setSingleLine()
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val box = FrameLayout(this).apply {
+            setPadding(pad, pad, pad, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.carlife_manual_ip_button))
+            .setMessage(getString(R.string.carlife_manual_ip_hint))
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val host = runCatching {
+                    java.net.InetAddress.getByName(input.text.toString().trim())
+                }.getOrNull() ?: return@setPositiveButton
+                engine?.stop()
+                engine = null
+                showStatus(getString(R.string.carlife_phone_found, host.hostAddress))
+                startEngine(currentSurface(), CarLifeEngine.Mode.WIRELESS, host)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun applyPicture() {

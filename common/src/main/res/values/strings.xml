@@ -706,4 +706,6 @@
     <string name="carlife_stop">Stop CarLife</string>
     <string name="carlife_wireless_mode">Wireless connection</string>
     <string name="carlife_settings_button">Settings</string>
+    <string name="carlife_manual_ip_button">IP connect</string>
+    <string name="carlife_manual_ip_hint">Phone IP for wireless, or 127.0.0.1 to connect the CarLife app on this same device (self-test).</string>
 </resources>
