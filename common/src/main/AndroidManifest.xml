@@ -110,7 +110,19 @@
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:screenOrientation="fullSensor"
-            android:theme="@style/Theme.Xcertplay" />
+            android:theme="@style/Theme.Xcertplay">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/carlife_usb_filter" />
+        </activity>
+
+        <service
+            android:name="com.shilapi.xcertplay.carlife.CarLifeSessionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|microphone" />
 
         <activity
             android:name="com.shilapi.xcertplay.ImageCropActivity"

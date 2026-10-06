@@ -213,6 +213,12 @@ class AccordHeadUnitWindow {
         override fun onAuthenResponse(response: CarLifeMessages.AuthenResponse) {
             slog("authen response received (${response.encryptValue.length}B) → send result")
             session?.sendAuthenResult(true)
+            // Announce the PC's Bluetooth identity (CarWith checks the HU's BT
+            // OOB info against the paired-car record before committing).
+            val btMac = System.getenv().entries
+                .firstOrNull { it.key.equals("COMPUTERNAME", true) }?.value
+            session?.sendHuBtOobInfo("CC:15:31:C2:92:95", btMac ?: "CarLife-FakeHU")
+            slog("BT OOB sent (CC:15:31:C2:92:95)")
             // Real CarLife may never send FEATURE_CONFIG_REQUEST — the HU owns
             // the feature answer and the encoder proposal (steps 5→6).
             if (!encoderProposed) {

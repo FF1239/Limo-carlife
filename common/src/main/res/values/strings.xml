@@ -705,4 +705,5 @@
     <string name="carlife_phone_not_found">No CarLife phone found on this network.</string>
     <string name="carlife_stop">Stop CarLife</string>
     <string name="carlife_wireless_mode">Wireless connection</string>
+    <string name="carlife_settings_button">Settings</string>
 </resources>

@@ -55,9 +55,19 @@ class CarLifeEngine(
     @Volatile
     private var running = false
 
+    /** Set when the user stops the engine; suppresses auto-reconnect. */
+    @Volatile
+    private var userStopped = false
+
+    private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    @Volatile
+    private var reconnectAttempt = 0
+
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     fun start() {
+        userStopped = false
         start(Mode.WIRED)
     }
 
@@ -89,6 +99,8 @@ class CarLifeEngine(
     }
 
     fun stop() {
+        userStopped = true
+        reconnectHandler.removeCallbacksAndMessages(null)
         running = false
         session?.close("engine stopped")
         session = null
@@ -141,7 +153,30 @@ class CarLifeEngine(
     override fun onClosed(reason: String) {
         releaseVideo()
         releaseAudio()
+        scheduleReconnect(reason)
         uiListener.onEngineState("disconnected", reason)
+    }
+
+    /**
+     * Auto-reconnect with capped backoff (1s, 2s, 4s … max 15s), unless the
+     * user stopped the engine. Keeps the projection alive across USB hiccups
+     * and phone-side session drops, mirroring DiPlay's connection behaviour.
+     */
+    private fun scheduleReconnect(reason: String) {
+        if (userStopped || !running) return
+        val delayMs = (1000L shl minOf(reconnectAttempt, 4)).coerceAtMost(15_000L)
+        reconnectAttempt++
+        uiListener.onEngineState("reconnecting", "$reason (retry $reconnectAttempt in ${delayMs / 1000}s)")
+        reconnectHandler.postDelayed({
+            if (userStopped || !running) return@postDelayed
+            aoa?.stop()
+            aoa = null
+            tcp?.stop()
+            tcp = null
+            session = null
+            running = false
+            start(mode)
+        }, delayMs)
     }
 
     override fun onState(state: AoaTransport.State, detail: String?) {
@@ -156,12 +191,47 @@ class CarLifeEngine(
 
     override fun onVersionMatch(matchStatus: Int) {
         if (matchStatus == 1) {
+            reconnectAttempt = 0
             session?.sendAuthenRequest()
-            session?.sendAuthenResult(true)
             uiListener.onEngineState("connected")
         } else {
             session?.close("version mismatch: $matchStatus")
         }
+    }
+
+    override fun onAuthenResponse(response: com.diplay.carlife.core.CarLifeMessages.AuthenResponse) {
+        // Strict 4-step order, then HU identity, feature answer and the
+        // encoder proposal — the sequence verified against real CarLife.
+        session?.sendAuthenResult(true)
+        val btAddress = try {
+            android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.address ?: ""
+        } catch (e: SecurityException) {
+            ""
+        }
+        session?.sendHuBtOobInfo(btAddress, android.os.Build.MODEL)
+        val p = CarLifePersistence.get(context)
+        session?.sendHuInfo(
+            CarLifeMessages.DeviceInfo(
+                os = "android",
+                manufacturer = android.os.Build.MANUFACTURER,
+                model = android.os.Build.MODEL,
+                brand = android.os.Build.BRAND,
+                release = android.os.Build.VERSION.RELEASE,
+                sdkInt = android.os.Build.VERSION.SDK_INT,
+            ),
+        )
+        session?.sendFeatureConfigResponse(
+            listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
+        )
+        session?.sendVideoEncoderInit(p.videoWidth(), p.videoHeight(), p.videoFrameRate())
+    }
+
+    override fun onMicRecordStart() {
+        if (CarLifePersistence.get(context).micUplink()) startMic()
+    }
+
+    override fun onMicRecordEnd() {
+        stopMic()
     }
 
     override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {

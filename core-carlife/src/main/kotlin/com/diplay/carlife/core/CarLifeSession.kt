@@ -124,6 +124,21 @@ class CarLifeSession(
         sendCmd(CarLife.Cmd.HU_FEATURE_CONFIG_RESPONSE, CarLifeMessages.FeatureConfigList(configs).encode())
     }
 
+    /**
+     * HU_BT_OOB_INFO: the head unit announces its Bluetooth identity so the
+     * phone can match it against the paired-car record (CarWith verifies this
+     * before it commits to a session).
+     */
+    fun sendHuBtOobInfo(address: String, name: String) {
+        val payload = ProtoWriter().apply {
+            writeString(1, address)   // CarlifeBTPairInfo.address
+            writeString(5, "")        // uuid
+            writeString(6, name)      // name
+            writeInt32(7, 0)          // status
+        }.toByteArray()
+        sendCmd(CarLife.Cmd.HU_BT_OOB_INFO, payload)
+    }
+
     fun sendVideoEncoderInit(
         width: Int = CarLife.DEFAULT_VIDEO_WIDTH,
         height: Int = CarLife.DEFAULT_VIDEO_HEIGHT,

@@ -705,4 +705,5 @@
     <string name="carlife_phone_not_found">未在同一网络中找到 CarLife 手机。</string>
     <string name="carlife_stop">停止 CarLife</string>
     <string name="carlife_wireless_mode">无线连接</string>
+    <string name="carlife_settings_button">设置</string>
 </resources>

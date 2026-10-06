@@ -158,6 +158,10 @@ class CarLifeTcpClient(
             out.write(frame, 8, frame.size - 8)
             out.flush()
         } catch (e: Exception) {
+            // Dead channel: drop it so upstream loops stop retrying writes.
+            c.open = false
+            c.output = null
+            runCatching { c.socket?.close() }
             if (running) listener.onChannelClosed(c.id, "write failed: ${e.message}")
         }
     }
