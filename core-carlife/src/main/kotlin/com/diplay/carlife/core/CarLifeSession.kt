@@ -189,11 +189,14 @@ class CarLifeSession(
 
     /** Feed incoming transport bytes; called by the transport read loop. */
     fun onBytes(data: ByteArray, offset: Int = 0, length: Int = data.size - offset) {
-        val frames = try {
-            splitter.feed(data, offset, length)
-        } catch (e: ProtocolException) {
-            close("frame error: ${e.message}")
-            return
+        // Channels arrive on their own threads; the splitter state is shared.
+        val frames = synchronized(splitter) {
+            try {
+                splitter.feed(data, offset, length)
+            } catch (e: ProtocolException) {
+                close("frame error: ${e.message}")
+                return
+            }
         }
         for (f in frames) dispatch(f)
     }

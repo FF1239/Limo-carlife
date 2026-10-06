@@ -162,25 +162,59 @@ class AccordHeadUnitWindow {
         private val decoder = VideoDecoder { img -> javax.swing.SwingUtilities.invokeLater { onFrame(img) } }.apply {
             start()
         }
+        private val logFile = java.io.PrintWriter(java.io.FileWriter("D:\\dev-tools\\hu-session.log", true))
+
+        private fun slog(line: String) {
+            synchronized(logFile) {
+                logFile.println("[${java.time.LocalTime.now()}] $line")
+                logFile.flush()
+            }
+            println("[pipe] $line")
+        }
 
         override fun onPhase(phase: CarLifeSession.Phase) {
+            slog("phase=$phase")
             status("阶段: $phase")
+            // After feature negotiation the HU proposes the video encoder
+            // (official 7-phase order, steps 5 → 6).
+            if (phase == CarLifeSession.Phase.FEATURE_CONFIG) {
+                session?.sendFeatureConfigResponse(
+                    listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
+                )
+                session?.sendVideoEncoderInit(1280, 480, 30)
+            }
         }
 
         override fun onVersionMatch(matchStatus: Int) {
+            slog("versionMatch=$matchStatus")
             status("协议版本匹配: $matchStatus — 继续认证")
             if (matchStatus == 1) {
                 session?.sendAuthenRequest()
                 session?.sendAuthenResult(true)
+                // The MD answers with its MD_INFO + FEATURE_CONFIG_REQUEST only
+                // after the HU introduces itself (official order, steps 2→5).
+                session?.sendHuInfo(
+                    CarLifeMessages.DeviceInfo(
+                        os = "android",
+                        manufacturer = "DiPlay",
+                        model = "CarLife-FakeHU",
+                        brand = "DiPlay",
+                        release = "9",
+                        sdk = "28",
+                        sdkInt = 28,
+                    ),
+                )
             }
         }
 
         override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {
+            slog("mobile info: ${info.manufacturer} ${info.model} android ${info.release} sdk=${info.sdkInt}")
             status("手机: ${info.manufacturer} ${info.model} Android ${info.release} (SDK ${info.sdkInt})")
             println("[md-info] ${info.manufacturer} ${info.model} ${info.release}")
         }
 
         override fun onVideoEncoderInitDone(info: CarLifeMessages.VideoEncoderInfo) {
+            slog("encoder init done ${info.width}x${info.height}@${info.frameRate} → start")
             videoCanvas = intArrayOf(info.width, info.height)
             status("视频协商: ${info.width}x${info.height}@${info.frameRate} — 请求推流")
             session?.sendVideoEncoderStart()

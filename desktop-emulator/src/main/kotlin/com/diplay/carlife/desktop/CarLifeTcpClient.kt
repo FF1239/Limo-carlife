@@ -116,6 +116,9 @@ class CarLifeTcpClient(
                 }
                 if (payloadLen < 0 || payloadLen > MAX_PAYLOAD) throw java.io.IOException("bad payload len $payloadLen")
                 val body = if (payloadLen > 0) readFully(input, buf, payloadLen) ?: break else ByteArray(0)
+                if (body.size != payloadLen) {
+                    throw java.io.IOException("body ${body.size} != header $payloadLen")
+                }
 
                 // Re-frame with the 8-byte transport header for the session splitter.
                 val frame = ByteArray(8 + headerLen + body.size)
@@ -131,7 +134,8 @@ class CarLifeTcpClient(
             }
             if (running) listener.onChannelClosed(c.id, "stream ended")
         } catch (e: Exception) {
-            if (running) listener.onChannelClosed(c.id, e.message ?: e.javaClass.simpleName)
+            e.printStackTrace()
+            if (running) listener.onChannelClosed(c.id, "${e.javaClass.simpleName}: ${e.message}")
         } finally {
             synchronized(this) {
                 if (c.open) {

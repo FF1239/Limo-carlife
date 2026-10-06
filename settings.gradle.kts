@@ -26,6 +26,7 @@ rootProject.name = "xcertplay"
 include(":common")
 include(":core-carlife")
 include(":desktop-emulator")
+include(":md-testapp")
 include(":mobile")
 include(":automotive")
 include(":shared")
