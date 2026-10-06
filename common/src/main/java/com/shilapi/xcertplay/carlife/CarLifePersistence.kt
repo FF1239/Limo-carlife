@@ -12,7 +12,7 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
 
     fun videoWidth(): Int = prefs.getInt(KEY_VIDEO_W, 1280)
 
-    fun videoHeight(): Int = prefs.getInt(KEY_VIDEO_H, 720)
+    fun videoHeight(): Int = prefs.getInt(KEY_VIDEO_H, 480)
 
     fun videoFrameRate(): Int = prefs.getInt(KEY_VIDEO_FPS, 30)
 
@@ -98,13 +98,17 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         const val DAY_NIGHT_DAY = 1
         const val DAY_NIGHT_NIGHT = 2
 
-        /** Resolution presets: label width x height (landscape canvases). */
+        /** Resolution presets: width x height, landscape head-unit canvases
+         *  plus portrait phone-shaped ones (phones mirror their own screen
+         *  aspect; a 16:9 landscape canvas letterboxes a portrait phone). */
         val RESOLUTION_PRESETS = arrayOf(
             intArrayOf(800, 480),
             intArrayOf(1024, 600),
             intArrayOf(1280, 480),
             intArrayOf(1280, 720),
             intArrayOf(1920, 720),
+            intArrayOf(720, 1280),
+            intArrayOf(1080, 1920),
         )
 
         @Volatile

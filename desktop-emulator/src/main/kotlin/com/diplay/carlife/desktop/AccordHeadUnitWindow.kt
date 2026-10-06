@@ -99,13 +99,28 @@ class AccordHeadUnitWindow {
         screen.repaint()
     }
 
-    /** Mouse on the panel → CarLife touch, scaled onto the negotiated canvas. */
+    /** Mouse on the panel → CarLife touch, mapped through the letterbox rect. */
     fun installTouchInput() {
         fun send(action: Int, e: MouseEvent) {
             val canvasW = pipe.videoCanvas[0]
             val canvasH = pipe.videoCanvas[1]
-            val x = (e.x / screen.width.toDouble() * canvasW).toInt().coerceIn(0, canvasW - 1)
-            val y = (e.y / screen.height.toDouble() * canvasH).toInt().coerceIn(0, canvasH - 1)
+            // The frame is letterboxed exactly as paintComponent draws it; map
+            // the click into that rect first, or edge clicks land offset.
+            val img = frame
+            val scale = if (img != null) {
+                minOf(screen.width / img.width.toDouble(), screen.height / img.height.toDouble())
+            } else {
+                minOf(screen.width / canvasW.toDouble(), screen.height / canvasH.toDouble())
+            }
+            val drawW = (if (img != null) img.width else canvasW) * scale
+            val drawH = (if (img != null) img.height else canvasH) * scale
+            val offX = (screen.width - drawW) / 2
+            val offY = (screen.height - drawH) / 2
+            val vx = e.x - offX
+            val vy = e.y - offY
+            if (vx < 0 || vy < 0 || vx > drawW || vy > drawH) return
+            val x = (vx / drawW * canvasW).toInt().coerceIn(0, canvasW - 1)
+            val y = (vy / drawH * canvasH).toInt().coerceIn(0, canvasH - 1)
             pipe.session?.sendTouchAction(action, x, y)
         }
         screen.addMouseListener(object : MouseAdapter() {
@@ -213,12 +228,9 @@ class AccordHeadUnitWindow {
         override fun onAuthenResponse(response: CarLifeMessages.AuthenResponse) {
             slog("authen response received (${response.encryptValue.length}B) → send result")
             session?.sendAuthenResult(true)
-            // Announce the PC's Bluetooth identity (CarWith checks the HU's BT
-            // OOB info against the paired-car record before committing).
-            val btMac = System.getenv().entries
-                .firstOrNull { it.key.equals("COMPUTERNAME", true) }?.value
-            session?.sendHuBtOobInfo("CC:15:31:C2:92:95", btMac ?: "CarLife-FakeHU")
-            slog("BT OOB sent (CC:15:31:C2:92:95)")
+            // NOTE: HU_BT_OOB_INFO with the desktop's random adapter MAC made
+            // real CarLife+ halt before VIDEO_ENCODER_INIT_DONE (the verified
+            // 10:34 success sent no BT OOB at all) — so it stays off here.
             // Real CarLife may never send FEATURE_CONFIG_REQUEST — the HU owns
             // the feature answer and the encoder proposal (steps 5→6).
             if (!encoderProposed) {
@@ -226,7 +238,9 @@ class AccordHeadUnitWindow {
                 session?.sendFeatureConfigResponse(
                     listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
                 )
-                session?.sendVideoEncoderInit(1280, 480, 30)
+                // Ask for the panel's native canvas; real CarLife renegotiates
+                // if it prefers something else (observed: 480p ask → 720p grant).
+                session?.sendVideoEncoderInit(1920, 720, 30)
             }
         }
 

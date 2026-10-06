@@ -199,6 +199,18 @@ class CarLifeEngine(
         if (matchStatus == 1) {
             reconnectAttempt = 0
             session?.sendAuthenRequest()
+            // Real CarLife waits for the HU introduction before answering the
+            // authen challenge (desktop parity — verified sequence).
+            session?.sendHuInfo(
+                CarLifeMessages.DeviceInfo(
+                    os = "android",
+                    manufacturer = android.os.Build.MANUFACTURER,
+                    model = android.os.Build.MODEL,
+                    brand = android.os.Build.BRAND,
+                    release = android.os.Build.VERSION.RELEASE,
+                    sdkInt = android.os.Build.VERSION.SDK_INT,
+                ),
+            )
             uiListener.onEngineState("connected")
         } else {
             session?.close("version mismatch: $matchStatus")
@@ -206,26 +218,20 @@ class CarLifeEngine(
     }
 
     override fun onAuthenResponse(response: com.diplay.carlife.core.CarLifeMessages.AuthenResponse) {
-        // Strict 4-step order, then HU identity, feature answer and the
-        // encoder proposal — the sequence verified against real CarLife.
+        // Strict 4-step order, then feature answer and the encoder proposal —
+        // the sequence verified against real CarLife. BT OOB identity goes out
+        // only with a real adapter address (real CarLife+ stalls on an empty
+        // one; the verified desktop session sent no BT OOB at all).
         session?.sendAuthenResult(true)
         val btAddress = try {
             android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.address ?: ""
         } catch (e: SecurityException) {
             ""
         }
-        session?.sendHuBtOobInfo(btAddress, android.os.Build.MODEL)
+        if (btAddress.isNotEmpty()) {
+            session?.sendHuBtOobInfo(btAddress, android.os.Build.MODEL)
+        }
         val p = CarLifePersistence.get(context)
-        session?.sendHuInfo(
-            CarLifeMessages.DeviceInfo(
-                os = "android",
-                manufacturer = android.os.Build.MANUFACTURER,
-                model = android.os.Build.MODEL,
-                brand = android.os.Build.BRAND,
-                release = android.os.Build.VERSION.RELEASE,
-                sdkInt = android.os.Build.VERSION.SDK_INT,
-            ),
-        )
         session?.sendFeatureConfigResponse(
             listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
         )
