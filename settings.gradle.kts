@@ -25,6 +25,7 @@ dependencyResolutionManagement {
 rootProject.name = "xcertplay"
 include(":common")
 include(":core-carlife")
+include(":desktop-emulator")
 include(":mobile")
 include(":automotive")
 include(":shared")
