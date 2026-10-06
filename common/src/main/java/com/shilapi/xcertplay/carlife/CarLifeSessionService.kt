@@ -48,8 +48,32 @@ class CarLifeSessionService : Service() {
                 .setOngoing(true)
                 .build()
         }
-        startForeground(NOTIFICATION_ID, notification)
+        startForegroundGuarded(notification)
         return START_STICKY
+    }
+
+    /**
+     * The microphone FGS type needs RECORD_AUDIO granted AND an eligible state
+     * (Android 14+); degrade to connectedDevice-only when the mic side is not
+     * yet grantable so the session service still runs.
+     */
+    private fun startForegroundGuarded(notification: Notification) {
+        val withMic = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        val deviceOnly = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, notification, withMic)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: SecurityException) {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION_ID, notification, deviceOnly)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

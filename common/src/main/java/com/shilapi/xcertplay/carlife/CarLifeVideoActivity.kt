@@ -198,6 +198,13 @@ class CarLifeVideoActivity : Activity() {
         })
         showStatus(getString(R.string.carlife_connecting))
 
+        // FGS microphone type requires RECORD_AUDIO granted at runtime.
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        }
+
         // Automated/external launches: intent extra "host" connects immediately.
         intent.getStringExtra("host")?.let { host ->
             runCatching {
