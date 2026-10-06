@@ -36,6 +36,7 @@ class CarLifeVideoActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var engine: CarLifeEngine? = null
     private lateinit var status: TextView
+    private lateinit var hudCard: TextView
     private lateinit var textureView: TextureView
     private lateinit var settingsPanel: CarLifeSettingsPanel
     private val picture = CarLifePicture.Settings()
@@ -164,6 +165,17 @@ class CarLifeVideoActivity : Activity() {
             setPadding(32.dp, 16.dp, 32.dp, 16.dp)
         }
 
+        hudCard = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            maxLines = 2
+            background = GradientDrawable().apply {
+                cornerRadius = 16.dp.toFloat()
+                setColor(0x99000000.toInt())
+            }
+            setPadding(20.dp, 10.dp, 20.dp, 10.dp)
+        }
+
         setContentView(FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(
@@ -190,6 +202,14 @@ class CarLifeVideoActivity : Activity() {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     Gravity.CENTER,
                 ),
+            )
+            addView(
+                hudCard,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+                ).apply { topMargin = 16.dp },
             )
             addView(
                 status,
@@ -288,6 +308,26 @@ class CarLifeVideoActivity : Activity() {
                         persistence.saveNegotiated(width, height)
                     }
                 }
+
+                override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
+                    main.post {
+                        hudCard.visibility = View.VISIBLE
+                        hudCard.text = if (info.song.isNotEmpty()) {
+                            "${info.artist} — ${info.song}".trim(' ', '—')
+                        } else {
+                            ""
+                        }
+                    }
+                }
+
+                override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
+                    main.post {
+                        if (info.roadName.isNotEmpty() || info.remainDistance > 0) {
+                            hudCard.visibility = View.VISIBLE
+                            hudCard.text = "导航:${info.roadName} · 剩余 ${info.remainDistance}m"
+                        }
+                    }
+                }
             },
         ).also {
             it.start(mode, wirelessHost)
@@ -334,6 +374,41 @@ class CarLifeVideoActivity : Activity() {
 
     override fun onBackPressed() {
         engine?.sendHardKey(CarLife.HardKey.BACK)
+    }
+
+    /**
+     * Physical/steering-wheel keys → CarLife hard-key codes (0x01–0x31).
+     * On real head units wheel buttons arrive as KeyEvents on the foreground
+     * activity; mapping them here gives wheel control car-agnostically.
+     */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        val e = engine ?: return super.onKeyDown(keyCode, event)
+        val code: Int? = when (keyCode) {
+            android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> CarLife.HardKey.SELECTOR_NEXT
+            android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> CarLife.HardKey.SELECTOR_PREVIOUS
+            android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
+            android.view.KeyEvent.KEYCODE_HEADSETHOOK,
+            -> CarLife.HardKey.MEDIA_START
+            android.view.KeyEvent.KEYCODE_MEDIA_STOP -> CarLife.HardKey.MEDIA_STOP
+            android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> CarLife.HardKey.SEEK_ADD
+            android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> CarLife.HardKey.SEEK_SUB
+            android.view.KeyEvent.KEYCODE_HOME -> CarLife.HardKey.HOME
+            android.view.KeyEvent.KEYCODE_CALL -> CarLife.HardKey.PHONE_CALL
+            android.view.KeyEvent.KEYCODE_ENDCALL -> CarLife.HardKey.PHONE_END
+            android.view.KeyEvent.KEYCODE_VOICE_ASSIST -> CarLife.HardKey.VR_START
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> CarLife.HardKey.MOVE_LEFT
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> CarLife.HardKey.MOVE_RIGHT
+            android.view.KeyEvent.KEYCODE_DPAD_UP -> CarLife.HardKey.MOVE_UP
+            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> CarLife.HardKey.MOVE_DOWN
+            android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> CarLife.HardKey.OK
+            else -> null
+        }
+        return if (code != null) {
+            e.sendHardKey(code)
+            true
+        } else {
+            super.onKeyDown(keyCode, event)
+        }
     }
 
     override fun onDestroy() {

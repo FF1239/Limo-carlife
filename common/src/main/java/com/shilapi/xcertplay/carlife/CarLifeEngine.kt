@@ -32,6 +32,12 @@ class CarLifeEngine(
 
         /** Negotiated video canvas, for touch coordinate scaling. */
         fun onEncoderSize(width: Int, height: Int)
+
+        /** Phone media metadata (song/artist/album art bytes) for HUD cards. */
+        fun onMediaInfo(info: CarLifeMessages.MediaInfo) {}
+
+        /** Phone navigation next-turn info for HUD cards. */
+        fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {}
     }
 
     /** WIRED uses AOA USB; WIRELESS connects to the phone's six TCP ports. */
@@ -106,6 +112,7 @@ class CarLifeEngine(
 
     fun stop() {
         userStopped = true
+        watchdog.removeCallbacksAndMessages(null)
         reconnectHandler.removeCallbacksAndMessages(null)
         running = false
         session?.close("engine stopped")
@@ -193,6 +200,45 @@ class CarLifeEngine(
 
     override fun onPhase(phase: CarLifeSession.Phase) {
         uiListener.onEngineState("phase:${phase.name.lowercase()}")
+        when (phase) {
+            CarLifeSession.Phase.ENCODER_INIT -> armStreamWatchdog()
+            else -> Unit
+        }
+    }
+
+    /**
+     * Live-testing finding: a phone stuck in the "已连接" limbo accepts the
+     * handshake but never answers VIDEO_ENCODER_INIT (no projection consent),
+     * and a granted session can also stop flowing after the phone locks. One
+     * rolling watchdog covers both: if no video packet arrived since the last
+     * arm/check, drop the session so the reconnect loop retries fresh.
+     */
+    private val watchdog = android.os.Handler(android.os.Looper.getMainLooper())
+
+    @Volatile
+    private var videoPacketsSinceArm = 0L
+
+    private fun armStreamWatchdog() {
+        videoPacketsSinceArm = 0
+        scheduleWatchdogCheck()
+    }
+
+    private fun scheduleWatchdogCheck() {
+        watchdog.removeCallbacksAndMessages(null)
+        watchdog.postDelayed({
+            if (!running) return@postDelayed
+            if (videoPacketsSinceArm == 0L) {
+                uiListener.onEngineState("watchdog", "no video flowing")
+                session?.close("watchdog: no video flowing")
+            } else {
+                videoPacketsSinceArm = 0
+                scheduleWatchdogCheck()
+            }
+        }, STREAM_WATCHDOG_MS)
+    }
+
+    private fun disarmStreamWatchdog() {
+        watchdog.removeCallbacksAndMessages(null)
     }
 
     override fun onVersionMatch(matchStatus: Int) {
@@ -259,6 +305,7 @@ class CarLifeEngine(
     }
 
     override fun onVideoData(timestamp: Long, h264: ByteArray) {
+        videoPacketsSinceArm++
         feedDecoder(h264, timestamp * 1000L)
     }
 
@@ -298,9 +345,13 @@ class CarLifeEngine(
         }
     }
 
-    override fun onMediaInfo(info: CarLifeMessages.MediaInfo) = Unit
+    override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
+        uiListener.onMediaInfo(info)
+    }
 
-    override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) = Unit
+    override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) {
+        uiListener.onNaviInfo(info)
+    }
 
     override fun onErrorCode(error: CarLifeMessages.ErrorCode) {
         Log.w(TAG, "phone error: ${error.errorCode}")
@@ -372,6 +423,7 @@ class CarLifeEngine(
 
     private fun rebuildTrack(current: AudioTrack?, init: CarLifeMessages.AudioInit, stream: Int): AudioTrack? {
         current?.let { runCatching { it.stop(); it.release() } }
+        if (stream == AudioManager.STREAM_MUSIC) requestAudioFocus()
         val sampleRate = if (init.sampleRate > 0) init.sampleRate else 16000
         val channels = if (init.channelConfig == 1) {
             AudioFormat.CHANNEL_OUT_MONO
@@ -401,12 +453,30 @@ class CarLifeEngine(
 
     private fun releaseAudio() {
         stopMic()
+        abandonAudioFocus()
         listOf(musicTrack, ttsTrack, vrTrack).forEach { t ->
             t?.let { runCatching { it.stop(); it.release() } }
         }
         musicTrack = null
         ttsTrack = null
         vrTrack = null
+    }
+
+    /** Take media focus so the car's own player ducks/pauses (head-unit correctness). */
+    private fun requestAudioFocus() {
+        val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .build()
+        runCatching { audioManager.requestAudioFocus(request) }
+    }
+
+    private fun abandonAudioFocus() {
+        runCatching { audioManager.abandonAudioFocus(null) }
     }
 
     // ---- mic uplink (VR) ----
@@ -453,5 +523,8 @@ class CarLifeEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val MIC_SAMPLE_RATE = 16_000
         private const val MIC_PACKET_BYTES = 1024
+
+        /** Encoder-init / video-flow watchdog window (live-testing: stalls). */
+        private const val STREAM_WATCHDOG_MS = 12_000L
     }
 }
