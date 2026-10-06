@@ -106,7 +106,7 @@
         <activity
             android:name="com.shilapi.xcertplay.carlife.CarLifeVideoActivity"
             android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:screenOrientation="fullSensor"

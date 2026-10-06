@@ -197,6 +197,20 @@ class CarLifeVideoActivity : Activity() {
             )
         })
         showStatus(getString(R.string.carlife_connecting))
+
+        // Automated/external launches: intent extra "host" connects immediately.
+        intent.getStringExtra("host")?.let { host ->
+            runCatching {
+                java.net.InetAddress.getByName(host)
+            }.getOrNull()?.let { addr ->
+                main.postDelayed({
+                    engine?.stop()
+                    engine = null
+                    showStatus(getString(R.string.carlife_phone_found, addr.hostAddress))
+                    startEngine(currentSurface(), CarLifeEngine.Mode.WIRELESS, addr)
+                }, 800)
+            }
+        }
     }
 
     /** Manual target: same-phone self-test uses 127.0.0.1 (local CarLife). */
