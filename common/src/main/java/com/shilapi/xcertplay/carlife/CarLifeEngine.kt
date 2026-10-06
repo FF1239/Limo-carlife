@@ -59,6 +59,10 @@ class CarLifeEngine(
     @Volatile
     private var userStopped = false
 
+    /** Last successful start parameters — reconnect reuses them verbatim. */
+    private var lastMode: Mode = Mode.WIRED
+    private var lastWirelessHost: java.net.InetAddress? = null
+
     private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     @Volatile
@@ -75,6 +79,8 @@ class CarLifeEngine(
         if (running) return
         running = true
         mode = newMode
+        lastMode = newMode
+        lastWirelessHost = wirelessHost
         when (mode) {
             Mode.WIRED -> {
                 val transport = AoaTransport(context, this)
@@ -175,7 +181,7 @@ class CarLifeEngine(
             tcp = null
             session = null
             running = false
-            start(mode)
+            start(lastMode, lastWirelessHost)
         }, delayMs)
     }
 
