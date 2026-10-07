@@ -44,15 +44,20 @@ class CarLifeVideoActivity : Activity() {
     private var engine: CarLifeEngine? = null
     private lateinit var textureView: TextureView
     private lateinit var statusOverlay: TextView
+    private lateinit var rootLayout: FrameLayout
     private lateinit var settingsPanel: CarLifeSettingsPanel
     private val picture = CarLifePicture.Settings()
     private var phoneWidth = CarLife.DEFAULT_VIDEO_WIDTH
     private var phoneHeight = CarLife.DEFAULT_VIDEO_HEIGHT
 
-    // turn capsule
-    private lateinit var turnCapsule: View
-    private lateinit var turnTitle: TextView
-    private lateinit var turnSub: TextView
+    // turn card (draggable overlay; survives phone app switches)
+    private lateinit var turnCard: CarLifeTurnCardView
+    private var turnX = 4
+    private var turnY = 8
+    private var turnDragStartX = 0f
+    private var turnDragStartY = 0f
+    private var turnOriginX = 0f
+    private var turnOriginY = 0f
 
     // speed capsule
     private lateinit var speedText: TextView
@@ -108,9 +113,20 @@ class CarLifeVideoActivity : Activity() {
             }
             demoSpeed = (demoSpeed + Random.nextInt(-9, 12)).coerceIn(0, 132)
             renderSpeed(demoSpeed, "DEMO")
+            // Demo navigation so the turn card can be previewed without a phone.
+            demoDistance -= 70
+            if (demoDistance < 40) {
+                demoDistance = 900
+                demoRoad = demoRoads[demoRoadIndex++ % demoRoads.size]
+            }
+            turnCard.setGuidance(demoRoad, demoDistance)
             main.postDelayed(this, 900)
         }
     }
+    private var demoDistance = 320
+    private var demoRoadIndex = 0
+    private val demoRoads = arrayOf("中山北路", "体育场路", "环城北路", "中河高架")
+    private var demoRoad = demoRoads[0]
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -150,6 +166,11 @@ class CarLifeVideoActivity : Activity() {
             main.post { startWirelessScan() }
         }
         showStatus(getString(R.string.carlife_connecting))
+        // Demo mode previews the instruments and turn card before any phone
+        // connects; the tick yields to real GPS/NAVI data when they arrive.
+        if (CarLifePersistence.get(this).demoData()) {
+            main.post(demoTick)
+        }
 
         // FGS microphone type needs RECORD_AUDIO; the unit GNSS speed source
         // needs fine location. Request both together, degrade gracefully.
@@ -166,6 +187,7 @@ class CarLifeVideoActivity : Activity() {
 
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        rootLayout = root
 
         // ---- full-screen projection ----
         textureView = TextureView(this).apply {
@@ -213,53 +235,44 @@ class CarLifeVideoActivity : Activity() {
         root.addView(statusOverlay, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
-        // ---- turn capsule (top-left) ----
-        turnCapsule = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = glass(30f)
-            setPadding(dp(8), dp(8), dp(24), dp(8))
-            addView(TextView(this@CarLifeVideoActivity).apply {
-                text = "↰"
-                setTextColor(CarbonTheme.RED)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(24f)
-                    setColor(0x1AE1062C)
-                    setStroke(dp(1), 0x33E1062C)
+        // ---- turn card (top-left by default; draggable, position persists) ----
+        turnCard = CarLifeTurnCardView(this)
+        root.addView(turnCard, object : FrameLayout.LayoutParams(
+            (resources.displayMetrics.widthPixels * 0.34f).toInt(),
+            (resources.displayMetrics.widthPixels * 0.34f * 0.21f).toInt(),
+        ) {})
+        turnCard.post { applyTurnCardPosition() }
+        turnCard.setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    turnDragStartX = ev.rawX; turnDragStartY = ev.rawY
+                    turnOriginX = (v.layoutParams as FrameLayout.LayoutParams).leftMargin.toFloat()
+                    turnOriginY = (v.layoutParams as FrameLayout.LayoutParams).topMargin.toFloat()
+                    true
                 }
-            }, LinearLayout.LayoutParams(dp(48), dp(48)))
-            val col = LinearLayout(this@CarLifeVideoActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(14), 0, 0, 0)
+
+                MotionEvent.ACTION_MOVE -> {
+                    val p = v.layoutParams as FrameLayout.LayoutParams
+                    p.leftMargin = (turnOriginX + ev.rawX - turnDragStartX).toInt()
+                        .coerceIn(0, root.width - v.width)
+                    p.topMargin = (turnOriginY + ev.rawY - turnDragStartY).toInt()
+                        .coerceIn(0, root.height - v.height)
+                    v.layoutParams = p
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    turnX = ((v.layoutParams as FrameLayout.LayoutParams).leftMargin * 100f
+                        / (root.width - v.width).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
+                    turnY = ((v.layoutParams as FrameLayout.LayoutParams).topMargin * 100f
+                        / (root.height - v.height).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
+                    CarLifePersistence.get(this).saveTurnCardPosition(turnX, turnY)
+                    true
+                }
+
+                else -> false
             }
-            turnTitle = TextView(this@CarLifeVideoActivity).apply {
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                typeface = Typeface.DEFAULT_BOLD
-                maxLines = 1
-            }
-            turnSub = TextView(this@CarLifeVideoActivity).apply {
-                setTextColor(0x99FFFFFF.toInt())
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                typeface = Typeface.MONOSPACE
-                maxLines = 1
-                setPadding(0, dp(3), 0, 0)
-            }
-            col.addView(turnTitle)
-            col.addView(turnSub)
-            addView(col)
-            visibility = View.GONE
         }
-        root.addView(turnCapsule, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.START,
-        ).apply {
-            val m = dp(16)
-            setMargins(m, m, m, m)
-        })
 
         // ---- speed capsule (top-right) ----
         val speed = LinearLayout(this).apply {
@@ -400,6 +413,7 @@ class CarLifeVideoActivity : Activity() {
                 maxLines = 1
             }
             mediaArtist = TextView(this@CarLifeVideoActivity).apply {
+                text = getString(R.string.widget_no_media)
                 setTextColor(0x8CFFFFFF.toInt())
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 maxLines = 1
@@ -604,14 +618,26 @@ class CarLifeVideoActivity : Activity() {
 
     private fun toggleAppMode() {
         modeIsMusic = !modeIsMusic
+        // The turn card stays visible in BOTH modes: navigation data keeps
+        // flowing from the phone while music is in the foreground (0.2.11
+        // lesson - guidance must not disappear with the map).
         if (modeIsMusic) {
             engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MUSIC)
             btnModeLabel.text = "➤"
-            turnCapsule.visibility = View.GONE
         } else {
             engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MAP)
             btnModeLabel.text = "♪"
         }
+    }
+
+    /** Re-applies the persisted card position within the current canvas. */
+    private fun applyTurnCardPosition() {
+        val p = turnCard.layoutParams as FrameLayout.LayoutParams
+        val maxX = (rootLayout.width - turnCard.width).coerceAtLeast(1)
+        val maxY = (rootLayout.height - turnCard.height).coerceAtLeast(1)
+        p.leftMargin = turnX * maxX / 100
+        p.topMargin = turnY * maxY / 100
+        turnCard.layoutParams = p
     }
 
     private fun toggleMediaPlay() {
@@ -849,13 +875,11 @@ class CarLifeVideoActivity : Activity() {
 
                 override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
                     main.post {
-                        val road = info.roadName.takeIf { it.isNotBlank() }
-                        if (road == null && info.remainDistance <= 0) {
-                            turnCapsule.visibility = View.GONE
+                        // Expired or empty guidance clears; missing values stay absent.
+                        if (info.roadName.isBlank() && info.remainDistance <= 0) {
+                            turnCard.hideCard()
                         } else {
-                            turnTitle.text = road ?: getString(R.string.navi_turn_ahead)
-                            turnSub.text = if (info.remainDistance > 0) "${info.remainDistance} m" else ""
-                            turnCapsule.visibility = View.VISIBLE
+                            turnCard.setGuidance(info.roadName, info.remainDistance)
                         }
                     }
                 }
@@ -905,6 +929,14 @@ class CarLifeVideoActivity : Activity() {
     // ---- input ----
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Paused projection: tapping the frozen frame resumes instead of
+        // forwarding touches to a phone picture the user cannot see move.
+        if (videoPaused && event.actionMasked == MotionEvent.ACTION_UP) {
+            videoPaused = false
+            engine?.setVideoPaused(false)
+            btnPauseLabel.text = "❚❚"
+            return true
+        }
         val e = engine ?: return super.onTouchEvent(event)
         val action = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> CarLife.TOUCH_ACTION_DOWN

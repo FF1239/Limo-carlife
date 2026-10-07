@@ -101,6 +101,15 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         prefs.edit().putString(KEY_LAST_PHONE, v).apply()
     }
 
+    /** Turn-card overlay position in percent of the free area (0..100). */
+    fun turnCardX(): Int = prefs.getInt(KEY_TURN_X, 4)
+
+    fun turnCardY(): Int = prefs.getInt(KEY_TURN_Y, 8)
+
+    fun saveTurnCardPosition(x: Int, y: Int) {
+        prefs.edit().putInt(KEY_TURN_X, x).putInt(KEY_TURN_Y, y).apply()
+    }
+
     /** Navigation-voice volume (TTS track gain), 0..100. */
     fun ttsVolume(): Int = prefs.getInt(KEY_TTS_VOLUME, 100)
 
@@ -128,6 +137,8 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         private const val KEY_ACCENT = "accent"
         private const val KEY_LAST_PHONE = "last_phone"
         private const val KEY_TTS_VOLUME = "tts_volume"
+        private const val KEY_TURN_X = "turn_card_x"
+        private const val KEY_TURN_Y = "turn_card_y"
 
         const val DAY_NIGHT_SYSTEM = 0
         const val DAY_NIGHT_DAY = 1
