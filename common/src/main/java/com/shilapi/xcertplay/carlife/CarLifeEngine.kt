@@ -36,8 +36,8 @@ class CarLifeEngine(
         /** Phone media metadata (song/artist/album art bytes) for HUD cards. */
         fun onMediaInfo(info: CarLifeMessages.MediaInfo) {}
 
-        /** Phone navigation next-turn info for HUD cards. */
-        fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {}
+    /** Phone navigation next-turn info for HUD cards. */
+    fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {}
     }
 
     /** WIRED uses AOA USB; WIRELESS connects to the phone's six TCP ports. */
@@ -155,6 +155,19 @@ class CarLifeEngine(
 
     fun sendHardKey(keycode: Int) {
         session?.sendHardKey(keycode)
+    }
+
+    // ---- video pause ----
+
+    /**
+     * Freezes the projection: H.264 packets keep being consumed (the watchdog
+     * must not trip) but are not decoded, so the last frame stays on screen.
+     */
+    @Volatile
+    private var videoPaused = false
+
+    fun setVideoPaused(paused: Boolean) {
+        videoPaused = paused
     }
 
     // ---- AoaTransport.Listener ----
@@ -306,7 +319,7 @@ class CarLifeEngine(
 
     override fun onVideoData(timestamp: Long, h264: ByteArray) {
         videoPacketsSinceArm++
-        feedDecoder(h264, timestamp * 1000L)
+        if (!videoPaused) feedDecoder(h264, timestamp * 1000L)
     }
 
     override fun onVideoHeartbeat() = Unit
@@ -351,6 +364,12 @@ class CarLifeEngine(
 
     override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) {
         uiListener.onNaviInfo(info)
+    }
+
+    override fun onUnknownCmd(id: Int, size: Int) {
+        // Unknown mobile→HU CMD (GPS lives in this range) — logged so a live
+        // capture run identifies the message id for a future decoder.
+        Log.i(TAG, "unknown cmd id=0x%04X size=%d".format(id, size))
     }
 
     override fun onErrorCode(error: CarLifeMessages.ErrorCode) {
@@ -464,6 +483,13 @@ class CarLifeEngine(
 
     /** Take media focus so the car's own player ducks/pauses (head-unit correctness). */
     private fun requestAudioFocus() {
+        val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+            // Calls/nav prompts duck the projected media; anything else restores.
+            val volume = if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) 0.18f else 1f
+            listOf(musicTrack, ttsTrack).forEach { t ->
+                t?.let { runCatching { it.setVolume(volume) } }
+            }
+        }
         val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(
                 android.media.AudioAttributes.Builder()
@@ -471,6 +497,7 @@ class CarLifeEngine(
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build(),
             )
+            .setOnAudioFocusChangeListener(focusListener)
             .build()
         runCatching { audioManager.requestAudioFocus(request) }
     }

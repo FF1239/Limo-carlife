@@ -77,6 +77,23 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         prefs.edit().putBoolean(KEY_WIRELESS, v).apply()
     }
 
+    /**
+     * Simulated speed/gear when no real vehicle source exists (no CAN, no
+     * GPS channel yet). Off = gauge stays at standby until a real source lands.
+     */
+    fun demoData(): Boolean = prefs.getBoolean(KEY_DEMO_DATA, true)
+
+    fun saveDemoData(v: Boolean) {
+        prefs.edit().putBoolean(KEY_DEMO_DATA, v).apply()
+    }
+
+    /** Accent colour of the carbon theme (red / blue / orange). */
+    fun accent(): String = prefs.getString(KEY_ACCENT, ACCENT_RED) ?: ACCENT_RED
+
+    fun saveAccent(v: String) {
+        prefs.edit().putString(KEY_ACCENT, v).apply()
+    }
+
     companion object {
         private const val FILE = "carlife_settings"
 
@@ -93,10 +110,16 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_MIC_UPLINK = "mic_uplink"
         private const val KEY_WIRELESS = "wireless"
+        private const val KEY_DEMO_DATA = "demo_data"
+        private const val KEY_ACCENT = "accent"
 
         const val DAY_NIGHT_SYSTEM = 0
         const val DAY_NIGHT_DAY = 1
         const val DAY_NIGHT_NIGHT = 2
+
+        const val ACCENT_RED = "red"
+        const val ACCENT_BLUE = "blue"
+        const val ACCENT_ORANGE = "orange"
 
         /** Resolution presets: width x height, landscape head-unit canvases
          *  plus portrait phone-shaped ones (phones mirror their own screen

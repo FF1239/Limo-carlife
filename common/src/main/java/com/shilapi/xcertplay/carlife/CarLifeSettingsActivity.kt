@@ -25,6 +25,7 @@ class CarLifeSettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CarbonTheme.load(this)
 
         val scroll = android.widget.ScrollView(this).apply { setBackgroundColor(BG) }
         val column = LinearLayout(this).apply {
@@ -96,7 +97,29 @@ class CarLifeSettingsActivity : Activity() {
         behaviourPanel.addView(toggle(getString(R.string.settings_wireless), persistence.wirelessEnabled()) {
             persistence.saveWirelessEnabled(it)
         })
+        behaviourPanel.addView(toggle(getString(R.string.settings_demo_data), persistence.demoData()) {
+            persistence.saveDemoData(it)
+        })
         column.addView(behaviourPanel)
+
+        // appearance section
+        column.addView(panelTitle(getString(R.string.settings_appearance), dp(26), dp(10)))
+        val accentPanel = panel()
+        val accentRow = LinearLayout(this)
+        listOf(
+            CarLifePersistence.ACCENT_RED to getString(R.string.settings_accent_red),
+            CarLifePersistence.ACCENT_BLUE to getString(R.string.settings_accent_blue),
+            CarLifePersistence.ACCENT_ORANGE to getString(R.string.settings_accent_orange),
+        ).forEachIndexed { i, (value, label) ->
+            if (i > 0) accentRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+            accentRow.addView(chip(label, persistence.accent() == value) {
+                persistence.saveAccent(value)
+                recreate()
+            }, LinearLayout.LayoutParams(0, dp(46), 1f))
+        }
+        accentPanel.addView(accentRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        column.addView(accentPanel)
 
         setContentView(scroll)
     }

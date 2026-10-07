@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.carlife
 
 import android.app.Activity
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -19,6 +20,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -39,6 +41,7 @@ class CarLifeVideoActivity : Activity() {
     private lateinit var gauge: GaugeView
     private lateinit var ticker: TelemetryBar
     private lateinit var hudMedia: TextView
+    private lateinit var hudNavi: TextView
     private lateinit var statusOverlay: TextView
     private lateinit var settingsPanel: CarLifeSettingsPanel
     private var dataGear: TextView? = null
@@ -77,6 +80,7 @@ class CarLifeVideoActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CarbonTheme.load(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -116,10 +120,13 @@ class CarLifeVideoActivity : Activity() {
                     h: Int,
                 ) {
                     st.setDefaultBufferSize(phoneWidth, phoneHeight)
+                    applyVideoTransform()
                     startEngine(Surface(st))
                 }
 
-                override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
+                override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {
+                    applyVideoTransform()
+                }
 
                 override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
                     engine?.stop()
@@ -142,6 +149,7 @@ class CarLifeVideoActivity : Activity() {
                 Gravity.CENTER,
             ),
         )
+        textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoTransform() }
 
         hudMedia = TextView(this).apply {
             setTextColor(CarbonTheme.TEXT)
@@ -162,6 +170,31 @@ class CarLifeVideoActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.START,
+            ).apply {
+                val m = dp(16)
+                setMargins(m, m, m, m)
+            },
+        )
+
+        hudNavi = TextView(this).apply {
+            setTextColor(CarbonTheme.TEXT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            maxLines = 2
+            typeface = Typeface.MONOSPACE
+            background = GradientDrawable().apply {
+                cornerRadius = 0f
+                setColor(0xB30C0D0F.toInt())
+                setStroke(dp(1), CarbonTheme.RED)
+            }
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            visibility = View.GONE
+        }
+        stage.addView(
+            hudNavi,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.END,
             ).apply {
                 val m = dp(16)
                 setMargins(m, m, m, m)
@@ -289,7 +322,7 @@ class CarLifeVideoActivity : Activity() {
         panel.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         val statsRow = LinearLayout(this)
-        listOf("续航" to "412 km", "油量" to "62%", "水温" to "90°C").forEachIndexed { i, (k, v) ->
+        listOf("续航" to "--", "油量" to "--", "水温" to "--").forEachIndexed { i, (k, v) ->
             if (i > 0) {
                 statsRow.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
                     LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT))
@@ -322,7 +355,19 @@ class CarLifeVideoActivity : Activity() {
             topMargin = dp(14)
         })
 
+        var videoPaused = false
+        var pauseLabel: TextView? = null
         val btnRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val pauseBtn = actionBtn(getString(R.string.carlife_pause)) {
+            videoPaused = !videoPaused
+            engine?.setVideoPaused(videoPaused)
+            pauseLabel?.text = getString(if (videoPaused) R.string.carlife_resume else R.string.carlife_pause)
+        }
+        pauseLabel = (pauseBtn as ViewGroup).getChildAt(0) as TextView
+        btnRow2.addView(pauseBtn)
+        btnRow2.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+        btnRow2.addView(actionBtn(getString(R.string.carlife_screenshot)) { takeScreenshot() })
+        btnRow2.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
         btnRow2.addView(actionBtn(getString(R.string.carlife_disconnect)) {
             engine?.stop()
             finish()
@@ -391,6 +436,41 @@ class CarLifeVideoActivity : Activity() {
      * ColorMatrix goes through a hardware layer paint instead (and drops the
      * layer entirely at neutral settings).
      */
+    /**
+     * Letterboxes the projection inside the stage: the phone canvas keeps its
+     * aspect (black bars top/bottom or left/right) instead of stretching.
+     */
+    private fun applyVideoTransform() {
+        val vw = textureView.width
+        val vh = textureView.height
+        if (vw == 0 || vh == 0 || phoneWidth == 0 || phoneHeight == 0) return
+        val scale = minOf(vw.toFloat() / phoneWidth, vh.toFloat() / phoneHeight)
+        val matrix = Matrix()
+        matrix.setScale(scale, scale)
+        matrix.postTranslate((vw - phoneWidth * scale) / 2f, (vh - phoneHeight * scale) / 2f)
+        textureView.setTransform(matrix)
+    }
+
+    /** Saves the current projection frame into this app's external pictures dir. */
+    private fun takeScreenshot() {
+        val bitmap = textureView.bitmap
+        if (bitmap == null) {
+            Toast.makeText(this, getString(R.string.screenshot_failed), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES) ?: filesDir
+        val file = java.io.File(dir, "carlife-${System.currentTimeMillis()}.jpg")
+        try {
+            java.io.FileOutputStream(file).use { out ->
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            Toast.makeText(this, getString(R.string.screenshot_saved, file.name), Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Log.w(TAG, "screenshot failed", e)
+            Toast.makeText(this, getString(R.string.screenshot_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun applyPicture() {
         val neutral = picture.brightness == 0 && picture.contrast == 0 &&
             picture.saturation == 0 && picture.warmth == 0 && !picture.night
@@ -464,7 +544,13 @@ class CarLifeVideoActivity : Activity() {
                 }
 
                 override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {
-                    main.post { Log.i(TAG, "phone: ${info.manufacturer} ${info.model}") }
+                    main.post {
+                        Log.i(TAG, "phone: ${info.manufacturer} ${info.model}")
+                        val name = listOf(info.manufacturer, info.model)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" ")
+                        if (name.isNotEmpty()) ticker.update("PHONE", name)
+                    }
                 }
 
                 override fun onEncoderSize(width: Int, height: Int) {
@@ -473,6 +559,7 @@ class CarLifeVideoActivity : Activity() {
                         phoneHeight = height
                         persistence.saveNegotiated(width, height)
                         textureView.surfaceTexture?.setDefaultBufferSize(width, height)
+                        applyVideoTransform()
                         ticker.update("CANVAS", "${width}×${height}")
                     }
                 }
@@ -486,9 +573,27 @@ class CarLifeVideoActivity : Activity() {
                     }
                 }
 
-                override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) = Unit
+                override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
+                    main.post {
+                        val text = listOfNotNull(
+                            info.roadName.takeIf { it.isNotBlank() },
+                            info.remainDistance.takeIf { it > 0 }?.let { "${it}m" },
+                        ).joinToString("  ")
+                        if (text.isEmpty()) {
+                            hudNavi.visibility = View.GONE
+                        } else {
+                            hudNavi.text = "↰ $text"
+                            hudNavi.visibility = View.VISIBLE
+                        }
+                    }
+                }
             },
-        ).also { it.start(mode, wirelessHost) }
+        ).also {
+            it.start(mode, wirelessHost)
+            // Keep the session alive under a foreground notification so the
+            // head unit cannot kill it while the user switches screens.
+            CarLifeSessionService.start(applicationContext)
+        }
     }
 
     private fun onState(state: String, detail: String?) {
@@ -497,7 +602,13 @@ class CarLifeVideoActivity : Activity() {
             state.startsWith("phase:streaming") || state == "connected" -> {
                 ticker.update("LINK", "ONLINE", online = true)
                 main.removeCallbacks(demoTick)
-                main.post(demoTick)
+                if (CarLifePersistence.get(this).demoData()) {
+                    main.post(demoTick)
+                } else {
+                    gauge.setGauge(0, "P", 0, isStandby = true)
+                    dataGear?.text = "P"
+                    dataRpm?.text = "--"
+                }
                 showStatus(getString(R.string.carlife_projecting))
             }
 
@@ -512,9 +623,18 @@ class CarLifeVideoActivity : Activity() {
                 showStatus(getString(R.string.carlife_disconnected, detail ?: ""))
             }
 
-            else -> showStatus(state + (detail?.let { " — $it" } ?: ""))
+            state == "scanning" -> showStatus(getString(R.string.state_scanning))
+            state == "wireless" || state == "wireless-connecting" ->
+                showStatus(getString(R.string.state_wireless_connecting, detail ?: ""))
+            state == "reconnecting" ->
+                showStatus(getString(R.string.state_reconnecting, detail ?: ""))
+            state == "watchdog" -> showStatus(getString(R.string.state_watchdog))
+            else -> showStatus(localizedState(state, detail))
         }
     }
+
+    private fun localizedState(state: String, detail: String?): String =
+        state + (detail?.let { " — $it" } ?: "")
 
     private fun showStatus(text: String) {
         statusOverlay.text = text
@@ -531,12 +651,18 @@ class CarLifeVideoActivity : Activity() {
             MotionEvent.ACTION_MOVE -> CarLife.TOUCH_ACTION_MOVE
             else -> return super.onTouchEvent(event)
         }
-        val x = (event.x / textureView.width.coerceAtLeast(1) * phoneWidth).toInt().coerceIn(0, phoneWidth - 1)
-        val y = (event.y / textureView.height.coerceAtLeast(1) * phoneHeight).toInt().coerceIn(0, phoneHeight - 1)
+        // Report the pointer that triggered the event (or the first one while
+        // dragging); multi-finger gestures still map to single taps for now.
+        val sample = if (event.actionMasked == MotionEvent.ACTION_MOVE) 0 else event.actionIndex
+        val px = event.getX(sample)
+        val py = event.getY(sample)
+        val x = (px / textureView.width.coerceAtLeast(1) * phoneWidth).toInt().coerceIn(0, phoneWidth - 1)
+        val y = (py / textureView.height.coerceAtLeast(1) * phoneHeight).toInt().coerceIn(0, phoneHeight - 1)
         e.sendTouch(action, x, y)
         return true
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onBackPressed() {
         engine?.sendHardKey(CarLife.HardKey.BACK)
     }

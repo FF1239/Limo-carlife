@@ -736,4 +736,20 @@
     <string name="settings_autoconnect">Auto-connect on USB plug-in</string>
     <string name="settings_mic">Microphone uplink (voice)</string>
     <string name="settings_wireless">Allow wireless connection</string>
+
+    <!-- CarLife states & actions -->
+    <string name="carlife_resume">Resume projection</string>
+    <string name="carlife_screenshot">Screenshot</string>
+    <string name="screenshot_saved">Saved: %1$s</string>
+    <string name="screenshot_failed">Screenshot failed</string>
+    <string name="home_carplay">CarPlay</string>
+    <string name="state_scanning">Searching USB for the CarLife phone…</string>
+    <string name="state_wireless_connecting">Connecting over Wi-Fi (%1$s)…</string>
+    <string name="state_reconnecting">Reconnecting (%1$s)</string>
+    <string name="state_watchdog">No video flow, rebuilding the session…</string>
+    <string name="settings_demo_data">Demo data (simulated speed without a real source)</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_accent_red">Red</string>
+    <string name="settings_accent_blue">Blue</string>
+    <string name="settings_accent_orange">Orange</string>
 </resources>

@@ -46,6 +46,7 @@ class CarLifeHomeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CarbonTheme.load(this)
         buildUi()
         main.post(clockTick)
         ticker.update("LINK", "OFFLINE", red = true)
@@ -54,6 +55,22 @@ class CarLifeHomeActivity : Activity() {
         ticker.update("CANVAS", canvasLabel())
 
         if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            openProjectionWhenAutoConnect()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Already-open home + a fresh USB plug-in: honour the auto-connect
+        // setting here too (singleTop means onCreate won't run again).
+        setIntent(intent)
+        if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            openProjectionWhenAutoConnect()
+        }
+    }
+
+    private fun openProjectionWhenAutoConnect() {
+        if (CarLifePersistence.get(this).autoConnect()) {
             openProjection(wired = true)
         }
     }
@@ -155,6 +172,9 @@ class CarLifeHomeActivity : Activity() {
         actions.addAction(getString(R.string.home_wireless)) { openProjection(wired = false) }
         actions.addAction(getString(R.string.home_settings)) {
             startActivity(Intent(this, CarLifeSettingsActivity::class.java))
+        }
+        actions.addAction(getString(R.string.home_carplay)) {
+            startActivity(Intent(this, com.shilapi.xcertplay.CarPlayHostActivity::class.java))
         }
         right.addView(actions, wrap().apply { topMargin = dp(20) })
         mainArea.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))

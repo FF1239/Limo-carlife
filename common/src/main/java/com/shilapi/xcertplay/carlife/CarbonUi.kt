@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.carlife
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -14,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Shared carbon/track-red palette for the CarLife channel UI. */
@@ -22,11 +24,22 @@ object CarbonTheme {
     val PANEL = Color.parseColor("#17191C")
     val PANEL_DEEP = Color.parseColor("#0C0D0F")
     val HAIRLINE = Color.parseColor("#2A2E33")
-    val RED = Color.parseColor("#E1062C")
+
+    /** Mutable accent — every screen calls [load] before building views. */
+    var RED = Color.parseColor("#E1062C")
+
     val TEXT = Color.parseColor("#E8EAEE")
     val TEXT_DIM = Color.parseColor("#9AA0A8")
     val TEXT_FAINT = Color.parseColor("#585F68")
     val ONLINE = Color.parseColor("#2EE06C")
+
+    fun load(context: Context) {
+        RED = when (CarLifePersistence.get(context).accent()) {
+            CarLifePersistence.ACCENT_BLUE -> Color.parseColor("#2E7CF6")
+            CarLifePersistence.ACCENT_ORANGE -> Color.parseColor("#FF7A00")
+            else -> Color.parseColor("#E1062C")
+        }
+    }
 
     fun hairlinePanel(context: Context): android.graphics.drawable.GradientDrawable =
         android.graphics.drawable.GradientDrawable().apply {
@@ -46,6 +59,10 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
     private var gear = "—"
     private var rpm = 0
     private var standby = true
+
+    /** Animated value the needle/arc/ticks follow so changes glide. */
+    private var displaySpeed = 0f
+    private var animator: ValueAnimator? = null
 
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; color = Color.parseColor("#23262B"); strokeWidth = 2f
@@ -84,6 +101,19 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
         this.rpm = rpm
         standby = isStandby
         speedPaint.color = if (isStandby) CarbonTheme.RED else Color.WHITE
+        animator?.cancel()
+        if (isStandby) {
+            displaySpeed = 0f
+        } else {
+            animator = ValueAnimator.ofFloat(displaySpeed, speedKmh.toFloat()).apply {
+                duration = 450
+                addUpdateListener {
+                    displaySpeed = it.animatedValue as Float
+                    invalidate()
+                }
+                start()
+            }
+        }
         invalidate()
     }
 
@@ -97,7 +127,7 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
         canvas.drawCircle(cx, cy, radius - dp(11f), dashPaint)
 
         // 12 major ticks; lit proportionally to speed (0..240)
-        val fraction = speed.coerceIn(0, 240) / 240f
+        val fraction = displaySpeed.coerceIn(0f, 240f) / 240f
         val litCount = (fraction * 12).toInt()
         for (i in 0 until 12) {
             val angle = Math.toRadians((i * 30 - 90).toDouble())
@@ -139,7 +169,7 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
         // centre readout
         speedPaint.textSize = dp(if (standby) 44f else 58f)
         val ty = cy - dp(if (standby) 6f else 10f)
-        canvas.drawText(if (standby) "000" else speed.toString(), cx, ty, speedPaint)
+        canvas.drawText(if (standby) "000" else displaySpeed.roundToInt().toString(), cx, ty, speedPaint)
         unitPaint.textSize = dp(11f)
         canvas.drawText(if (standby) "RPM ×100" else "km/h", cx, ty + dp(24f), unitPaint)
         subPaint.textSize = dp(13f)

@@ -57,6 +57,9 @@ class CarLifeSession(
 
         fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo)
 
+        /** CMD message outside the known set (e.g. GPS) — default no-op. */
+        fun onUnknownCmd(id: Int, size: Int) {}
+
         fun onErrorCode(error: CarLifeMessages.ErrorCode)
 
         fun onBackground()
@@ -286,6 +289,7 @@ class CarLifeSession(
             CarLife.Cmd.MIC_RECORD_END -> listener.onMicRecordEnd()
             CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> listener.onRsaPublicKeyRequest()
             CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> listener.onAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
+            else -> listener.onUnknownCmd(serviceType.toInt(), payload.size)
         }
     }
 
