@@ -708,4 +708,32 @@
     <string name="carlife_settings_button">Settings</string>
     <string name="carlife_manual_ip_button">IP connect</string>
     <string name="carlife_manual_ip_hint">Phone IP for wireless, or 127.0.0.1 to connect the CarLife app on this same device (self-test).</string>
+
+    <!-- Carbon instrument home -->
+    <string name="home_headline">Ready when you are</string>
+    <string name="home_waiting_phone">waiting for phone</string>
+    <string name="home_connect">CONNECT PHONE</string>
+    <string name="home_cap_video">Video</string>
+    <string name="home_cap_audio">Audio</string>
+    <string name="home_cap_touch">Touch</string>
+    <string name="home_usb">USB</string>
+    <string name="home_wireless">Wireless</string>
+    <string name="home_settings">Settings</string>
+    <string name="home_hint_wireless">Install CarLife+ on the phone, plug in USB or join the same Wi-Fi. Projection, audio and touch come straight to this unit.</string>
+    <string name="carlife_pause">Pause</string>
+    <string name="carlife_disconnect">Disconnect</string>
+
+    <!-- CarLife settings page -->
+    <string name="settings_title">CarLife settings</string>
+    <string name="settings_video">Video</string>
+    <string name="settings_picture">Picture</string>
+    <string name="settings_brightness">Brightness</string>
+    <string name="settings_contrast">Contrast</string>
+    <string name="settings_saturation">Saturation</string>
+    <string name="settings_warmth">Warmth</string>
+    <string name="settings_behaviour">Behaviour</string>
+    <string name="settings_daynight">Night mode</string>
+    <string name="settings_autoconnect">Auto-connect on USB plug-in</string>
+    <string name="settings_mic">Microphone uplink (voice)</string>
+    <string name="settings_wireless">Allow wireless connection</string>
 </resources>

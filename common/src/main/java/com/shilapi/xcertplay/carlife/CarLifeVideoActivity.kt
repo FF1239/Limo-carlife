@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.carlife
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.SurfaceTexture
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
@@ -15,7 +16,6 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -25,25 +25,55 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.diplay.carlife.core.CarLife
 import com.diplay.carlife.core.CarLifeMessages
 import com.shilapi.xcertplay.host.R
+import kotlin.random.Random
 
 /**
- * Full-screen CarLife projection with DiPlay-parity picture controls:
- * TextureView rendering (live brightness/contrast/saturation/warmth/night via
- * ColorMatrix), a floating settings panel, mic uplink, and the foreground
- * session service. Touch and hard keys pass through to the phone.
+ * Connected screen per the approved C1 Pro design: projection dominant
+ * (left 2/3, full height), right instrument column (live speed ring, vehicle
+ * data panel, controls), bottom telemetry ticker, carbon HUD styling.
  */
 class CarLifeVideoActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var engine: CarLifeEngine? = null
-    private lateinit var status: TextView
-    private lateinit var hudCard: TextView
     private lateinit var textureView: TextureView
+    private lateinit var gauge: GaugeView
+    private lateinit var ticker: TelemetryBar
+    private lateinit var hudMedia: TextView
+    private lateinit var statusOverlay: TextView
     private lateinit var settingsPanel: CarLifeSettingsPanel
+    private var dataGear: TextView? = null
+    private var dataRpm: TextView? = null
     private val picture = CarLifePicture.Settings()
     private var phoneWidth = CarLife.DEFAULT_VIDEO_WIDTH
     private var phoneHeight = CarLife.DEFAULT_VIDEO_HEIGHT
 
-    private val hideStatus = Runnable { status.visibility = View.GONE }
+    private val hideStatus = Runnable { statusOverlay.visibility = View.GONE }
+
+    /**
+     * Demo vehicle source until a real CAN feed exists: a gently wandering
+     * speed that drives the ring, gear and rpm readouts.
+     */
+    private var demoSpeed = 0
+    private val demoTick = object : Runnable {
+        override fun run() {
+            demoSpeed = (demoSpeed + Random.nextInt(-9, 12)).coerceIn(0, 132)
+            val gear = when {
+                demoSpeed == 0 -> "P"
+                demoSpeed < 20 -> "1"
+                demoSpeed < 40 -> "2"
+                demoSpeed < 65 -> "3"
+                demoSpeed < 95 -> "4"
+                else -> "5"
+            }
+            val rpm = if (demoSpeed == 0) 800 else 900 + (demoSpeed * 23) % 4200
+            gauge.setGauge(demoSpeed, gear, rpm, isStandby = false)
+            dataGear?.text = gear
+            dataRpm?.text = rpm.toString()
+            ticker.update("SPEED", "$demoSpeed km/h", red = demoSpeed > 100)
+            ticker.update("GEAR", gear)
+            main.postDelayed(this, 900)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,16 +83,44 @@ class CarLifeVideoActivity : Activity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
-        val persistence = CarLifePersistence.get(this)
+        buildUi()
+
+        if (intent.getStringExtra("mode") == "wireless") {
+            main.post { startWirelessScan() }
+        }
+        showStatus(getString(R.string.carlife_connecting))
+
+        // FGS microphone type requires RECORD_AUDIO granted at runtime.
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        }
+    }
+
+    private fun buildUi() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(CarbonTheme.BG)
+        }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+        // ---- left: projection stage ----
+        val stage = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
         textureView = TextureView(this).apply {
             surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
+                override fun onSurfaceTextureAvailable(
+                    st: SurfaceTexture,
+                    w: Int,
+                    h: Int,
+                ) {
                     st.setDefaultBufferSize(phoneWidth, phoneHeight)
                     startEngine(Surface(st))
                 }
 
                 override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
+
                 override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
                     engine?.stop()
                     engine = null
@@ -76,10 +134,64 @@ class CarLifeVideoActivity : Activity() {
                 }
             }
         }
+        stage.addView(
+            textureView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER,
+            ),
+        )
+
+        hudMedia = TextView(this).apply {
+            setTextColor(CarbonTheme.TEXT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            maxLines = 2
+            typeface = Typeface.MONOSPACE
+            background = GradientDrawable().apply {
+                cornerRadius = 0f
+                setColor(0xB30C0D0F.toInt())
+                setStroke(dp(1), CarbonTheme.HAIRLINE)
+            }
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            visibility = View.GONE
+        }
+        stage.addView(
+            hudMedia,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.START,
+            ).apply {
+                val m = dp(16)
+                setMargins(m, m, m, m)
+            },
+        )
+
+        statusOverlay = TextView(this).apply {
+            setTextColor(CarbonTheme.TEXT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            letterSpacing = 0.06f
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = 0f
+                setColor(0xB30C0D0F.toInt())
+                setStroke(dp(1), CarbonTheme.HAIRLINE)
+            }
+            setPadding(dp(26), dp(14), dp(26), dp(14))
+        }
+        stage.addView(
+            statusOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ),
+        )
 
         settingsPanel = CarLifeSettingsPanel(
             this,
-            persistence,
+            CarLifePersistence.get(this),
             onApply = { settings ->
                 picture.brightness = settings.brightness
                 picture.contrast = settings.contrast
@@ -98,158 +210,225 @@ class CarLifeVideoActivity : Activity() {
                 startEngine(currentSurface())
             },
         ).apply { visibility = View.GONE }
+        stage.addView(
+            settingsPanel,
+            FrameLayout.LayoutParams(
+                (resources.displayMetrics.widthPixels * 0.62f).toInt().coerceAtLeast(dp(360)),
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ),
+        )
 
-        val settingsButton = Button(this).apply {
-            text = getString(R.string.carlife_settings_button)
-            textSize = 13f
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                cornerRadius = 20.dp.toFloat()
-                setColor(0x80000000.toInt())
-            }
-            setPadding(24.dp, 10.dp, 24.dp, 10.dp)
-            setOnClickListener {
-                settingsPanel.visibility =
-                    if (settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-            }
+        body.addView(stage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f))
+
+        // ---- right: instrument column ----
+        val instruments = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(CarbonTheme.PANEL_DEEP)
+            setPadding(dp(18), dp(16), dp(18), dp(16))
         }
 
-        val wirelessButton = Button(this).apply {
-            text = getString(R.string.carlife_wireless_connect)
-            textSize = 13f
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                cornerRadius = 20.dp.toFloat()
-                setColor(0x80000000.toInt())
-            }
-            setPadding(24.dp, 10.dp, 24.dp, 10.dp)
-            setOnClickListener {
-                showStatus(getString(R.string.carlife_searching_phone))
-                SubnetScanner.findPhone(
-                    onFound = { host ->
-                        main.post {
-                            showStatus(getString(R.string.carlife_phone_found, host.hostAddress))
-                            engine?.stop()
-                            engine = null
-                            startEngine(currentSurface(), CarLifeEngine.Mode.WIRELESS, host)
-                        }
-                    },
-                    onDone = { main.post { showStatus(getString(R.string.carlife_phone_not_found)) } },
-                )
-            }
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-
-        val manualIpButton = Button(this).apply {
-            text = getString(R.string.carlife_manual_ip_button)
-            textSize = 13f
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                cornerRadius = 20.dp.toFloat()
-                setColor(0x80000000.toInt())
-            }
-            setPadding(24.dp, 10.dp, 24.dp, 10.dp)
-            setOnClickListener { promptForIp() }
-        }
-
-        status = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                cornerRadius = 24.dp.toFloat()
-                setColor(0xB3000000.toInt())
-            }
-            setPadding(32.dp, 16.dp, 32.dp, 16.dp)
-        }
-
-        hudCard = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            maxLines = 2
-            background = GradientDrawable().apply {
-                cornerRadius = 16.dp.toFloat()
-                setColor(0x99000000.toInt())
-            }
-            setPadding(20.dp, 10.dp, 20.dp, 10.dp)
-        }
-
-        setContentView(FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
-            addView(
-                textureView,
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER),
-            )
-            addView(
-                LinearLayout(this@CarLifeVideoActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    setPadding(0, 0, 0, 16.dp)
-                    addView(settingsButton)
-                    addView(View(this@CarLifeVideoActivity), FrameLayout.LayoutParams(12.dp, 1))
-                    addView(wirelessButton)
-                    addView(View(this@CarLifeVideoActivity), FrameLayout.LayoutParams(12.dp, 1))
-                    addView(manualIpButton)
-                },
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM),
-            )
-            addView(
-                settingsPanel,
-                FrameLayout.LayoutParams(
-                    (resources.displayMetrics.widthPixels * 0.62f).toInt().coerceAtLeast(360.dp),
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.CENTER,
-                ),
-            )
-            addView(
-                hudCard,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.TOP or Gravity.CENTER_HORIZONTAL,
-                ).apply { topMargin = 16.dp },
-            )
-            addView(
-                status,
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
-            )
+        brandRow.addView(View(this).apply { setBackgroundColor(CarbonTheme.RED) },
+            LinearLayout.LayoutParams(dp(4), dp(14)))
+        brandRow.addView(TextView(this).apply {
+            text = "INSTRUMENTS"
+            setTextColor(CarbonTheme.TEXT)
+            textSize = 12f
+            letterSpacing = 0.22f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(10), 0, 0, 0)
         })
-        showStatus(getString(R.string.carlife_connecting))
+        brandRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        instruments.addView(brandRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        instruments.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
 
-        // FGS microphone type requires RECORD_AUDIO granted at runtime.
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        gauge = GaugeView(this).apply { setGauge(0, "P", 0, isStandby = true) }
+        instruments.addView(gauge, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(220)).apply { topMargin = dp(10) })
+
+        // vehicle data panel
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = CarbonTheme.hairlinePanel(this@CarLifeVideoActivity)
         }
-
-        // Automated/external launches: intent extra "host" connects immediately.
-        intent.getStringExtra("host")?.let { host ->
-            runCatching {
-                java.net.InetAddress.getByName(host)
-            }.getOrNull()?.let { addr ->
-                main.postDelayed({
-                    engine?.stop()
-                    engine = null
-                    showStatus(getString(R.string.carlife_phone_found, addr.hostAddress))
-                    startEngine(currentSurface(), CarLifeEngine.Mode.WIRELESS, addr)
-                }, 800)
+        val gearRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        val gearBig = TextView(this).apply {
+            text = "P"
+            setTextColor(CarbonTheme.RED)
+            textSize = 30f
+            typeface = Typeface.MONOSPACE
+        }
+        dataGear = gearBig
+        gearRow.addView(gearBig)
+        gearRow.addView(TextView(this).apply {
+            text = "GEAR · 挡位"
+            setTextColor(CarbonTheme.TEXT_FAINT)
+            textSize = 10f
+            letterSpacing = 0.18f
+            setPadding(dp(14), 0, 0, 0)
+        })
+        gearRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        dataRpm = TextView(this).apply {
+            text = "800"
+            setTextColor(CarbonTheme.TEXT)
+            textSize = 17f
+            typeface = Typeface.MONOSPACE
+        }
+        gearRow.addView(dataRpm)
+        panel.addView(gearRow)
+        panel.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        val statsRow = LinearLayout(this)
+        listOf("续航" to "412 km", "油量" to "62%", "水温" to "90°C").forEachIndexed { i, (k, v) ->
+            if (i > 0) {
+                statsRow.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
+                    LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT))
             }
+            statsRow.addView(statCell(k, v))
+        }
+        panel.addView(statsRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        instruments.addView(panel, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(14)
+        })
+
+        // controls
+        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        btnRow.addView(actionBtn(getString(R.string.carlife_settings_button)) {
+            settingsPanel.visibility =
+                if (settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        })
+        btnRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+        btnRow.addView(actionBtn(getString(R.string.carlife_wireless_connect)) {
+            startWirelessScan()
+        })
+        btnRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+        btnRow.addView(actionBtn(getString(R.string.carlife_manual_ip_button)) {
+            promptForIp()
+        })
+        instruments.addView(btnRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(14)
+        })
+
+        val btnRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        btnRow2.addView(actionBtn(getString(R.string.carlife_disconnect)) {
+            engine?.stop()
+            finish()
+        })
+        instruments.addView(btnRow2, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(10)
+        })
+
+        body.addView(instruments, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        root.addView(body, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        // ---- telemetry ticker ----
+        ticker = TelemetryBar(this)
+        root.addView(ticker, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        ticker.update("LINK", "OFFLINE", red = true)
+        ticker.update("SPEED", "0 km/h")
+        ticker.update("GEAR", "P")
+        ticker.update("CANVAS", "$phoneWidth×$phoneHeight")
+
+        setContentView(root)
+    }
+
+    private fun statCell(key: String, value: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(0, dp(10), 0, dp(10))
+        addView(TextView(this@CarLifeVideoActivity).apply {
+            text = key
+            setTextColor(CarbonTheme.TEXT_FAINT)
+            textSize = 9f
+            letterSpacing = 0.18f
+        })
+        addView(TextView(this@CarLifeVideoActivity).apply {
+            text = value
+            setTextColor(CarbonTheme.TEXT)
+            textSize = 16f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, dp(3), 0, 0)
+        })
+    }
+
+    private fun actionBtn(text: String, onClick: () -> Unit): View = FrameLayout(this).apply {
+        background = GradientDrawable().apply {
+            cornerRadius = 0f
+            setStroke(dp(1), CarbonTheme.HAIRLINE)
+            setColor(Color.parseColor("#1D2024"))
+        }
+        addView(TextView(this@CarLifeVideoActivity).apply {
+            this.text = text
+            setTextColor(CarbonTheme.TEXT)
+            textSize = 13f
+            letterSpacing = 0.14f
+            gravity = Gravity.CENTER
+        }, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        minimumHeight = dp(46)
+        isClickable = true
+        setOnClickListener { onClick() }
+    }
+
+    /**
+     * The stripped platform jar here has no TextureView.setPaint, so the
+     * ColorMatrix goes through a hardware layer paint instead (and drops the
+     * layer entirely at neutral settings).
+     */
+    private fun applyPicture() {
+        val neutral = picture.brightness == 0 && picture.contrast == 0 &&
+            picture.saturation == 0 && picture.warmth == 0 && !picture.night
+        if (neutral) {
+            textureView.setLayerType(View.LAYER_TYPE_NONE, null)
+        } else {
+            textureView.setLayerType(View.LAYER_TYPE_HARDWARE, CarLifePicture.paint(picture))
         }
     }
 
-    /** Manual target: same-phone self-test uses 127.0.0.1 (local CarLife). */
+    // ---- engine wiring ----
+
+    private fun currentSurface(): Surface? =
+        textureView.surfaceTexture?.let { Surface(it) }
+
+    private fun startWirelessScan() {
+        showStatus(getString(R.string.carlife_searching_phone))
+        SubnetScanner.findPhone(
+            onFound = { host ->
+                main.post {
+                    showStatus(getString(R.string.carlife_phone_found, host.hostAddress))
+                    engine?.stop()
+                    engine = null
+                    startEngine(currentSurface(), CarLifeEngine.Mode.WIRELESS, host)
+                }
+            },
+            onDone = { main.post { showStatus(getString(R.string.carlife_phone_not_found)) } },
+        )
+    }
+
     private fun promptForIp() {
         val input = android.widget.EditText(this).apply {
             setText("127.0.0.1")
             hint = "192.168.x.x / 127.0.0.1"
             setSingleLine()
         }
-        val pad = (16 * resources.displayMetrics.density).toInt()
         val box = FrameLayout(this).apply {
-            setPadding(pad, pad, pad, 0)
+            setPadding(dp(16), dp(16), dp(16), 0)
             addView(input)
         }
         android.app.AlertDialog.Builder(this)
@@ -269,17 +448,6 @@ class CarLifeVideoActivity : Activity() {
             .show()
     }
 
-    private fun applyPicture() {
-        val mode = CarLifePersistence.get(this).dayNightMode()
-        val night = CarLifePicture.isNight(mode, picture.night)
-        // Color filter applies through the view's hardware layer (TextureView
-        // has no setPaint; setLayerPaint on a hardware layer is the standard).
-        textureView.setLayerType(View.LAYER_TYPE_HARDWARE, CarLifePicture.paint(picture.copy(night = night)))
-    }
-
-    private fun currentSurface(): Surface? =
-        textureView.surfaceTexture?.let { texture -> Surface(texture) }
-
     private fun startEngine(
         surface: Surface?,
         mode: CarLifeEngine.Mode = CarLifeEngine.Mode.WIRED,
@@ -296,9 +464,7 @@ class CarLifeVideoActivity : Activity() {
                 }
 
                 override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {
-                    main.post {
-                        Log.i(TAG, "phone: ${info.manufacturer} ${info.model} (android ${info.release})")
-                    }
+                    main.post { Log.i(TAG, "phone: ${info.manufacturer} ${info.model}") }
                 }
 
                 override fun onEncoderSize(width: Int, height: Int) {
@@ -306,57 +472,56 @@ class CarLifeVideoActivity : Activity() {
                         phoneWidth = width
                         phoneHeight = height
                         persistence.saveNegotiated(width, height)
+                        textureView.surfaceTexture?.setDefaultBufferSize(width, height)
+                        ticker.update("CANVAS", "${width}×${height}")
                     }
                 }
 
                 override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
                     main.post {
-                        hudCard.visibility = View.VISIBLE
-                        hudCard.text = if (info.song.isNotEmpty()) {
-                            "${info.artist} — ${info.song}".trim(' ', '—')
-                        } else {
-                            ""
+                        if (info.song.isNotEmpty()) {
+                            hudMedia.visibility = View.VISIBLE
+                            hudMedia.text = "♪ ${info.artist} — ${info.song}".trim(' ', '—')
                         }
                     }
                 }
 
-                override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
-                    main.post {
-                        if (info.roadName.isNotEmpty() || info.remainDistance > 0) {
-                            hudCard.visibility = View.VISIBLE
-                            hudCard.text = "导航:${info.roadName} · 剩余 ${info.remainDistance}m"
-                        }
-                    }
-                }
+                override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) = Unit
             },
-        ).also {
-            it.start(mode, wirelessHost)
-            if (persistence.autoConnect()) CarLifeSessionService.start(this)
-        }
+        ).also { it.start(mode, wirelessHost) }
     }
 
     private fun onState(state: String, detail: String?) {
         Log.i(TAG, "state=$state detail=$detail")
         when {
-            state.startsWith("phase:streaming") || state == "connected" ->
+            state.startsWith("phase:streaming") || state == "connected" -> {
+                ticker.update("LINK", "ONLINE", online = true)
+                main.removeCallbacks(demoTick)
+                main.post(demoTick)
                 showStatus(getString(R.string.carlife_projecting))
-            state == "disconnected" || state == "closed" ->
+            }
+
+            state == "disconnected" || state == "closed" || state == "stopped" -> {
+                main.removeCallbacks(demoTick)
+                gauge.setGauge(0, "P", 0, isStandby = true)
+                dataGear?.text = "P"
+                dataRpm?.text = "800"
+                ticker.update("LINK", "OFFLINE", red = true)
+                ticker.update("SPEED", "0 km/h")
+                ticker.update("GEAR", "P")
                 showStatus(getString(R.string.carlife_disconnected, detail ?: ""))
-            state == "stopped" -> Unit
-            state.startsWith("reconnecting") ->
-                showStatus(getString(R.string.carlife_state, state + (detail?.let { " — $it" } ?: "")))
-            else -> showStatus(getString(R.string.carlife_state, state + (detail?.let { " — $it" } ?: "")))
+            }
+
+            else -> showStatus(state + (detail?.let { " — $it" } ?: ""))
         }
     }
 
     private fun showStatus(text: String) {
-        status.text = text
-        status.visibility = View.VISIBLE
-        main.removeCallbacks(hideStatus)
-        if (text == getString(R.string.carlife_projecting)) {
-            main.postDelayed(hideStatus, STATUS_SHORT_MS)
-        }
+        statusOverlay.text = text
+        statusOverlay.visibility = View.VISIBLE
     }
+
+    // ---- input ----
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val e = engine ?: return super.onTouchEvent(event)
@@ -376,11 +541,6 @@ class CarLifeVideoActivity : Activity() {
         engine?.sendHardKey(CarLife.HardKey.BACK)
     }
 
-    /**
-     * Physical/steering-wheel keys → CarLife hard-key codes (0x01–0x31).
-     * On real head units wheel buttons arrive as KeyEvents on the foreground
-     * activity; mapping them here gives wheel control car-agnostically.
-     */
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
         val e = engine ?: return super.onKeyDown(keyCode, event)
         val code: Int? = when (keyCode) {
@@ -389,6 +549,7 @@ class CarLifeVideoActivity : Activity() {
             android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
             android.view.KeyEvent.KEYCODE_HEADSETHOOK,
             -> CarLife.HardKey.MEDIA_START
+
             android.view.KeyEvent.KEYCODE_MEDIA_STOP -> CarLife.HardKey.MEDIA_STOP
             android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> CarLife.HardKey.SEEK_ADD
             android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> CarLife.HardKey.SEEK_SUB
@@ -419,10 +580,9 @@ class CarLifeVideoActivity : Activity() {
         super.onDestroy()
     }
 
-    private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val TAG = "CarLifeVideo"
-        private const val STATUS_SHORT_MS = 2500L
     }
 }

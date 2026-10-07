@@ -42,7 +42,7 @@
             android:label="@string/app_name"
             android:enabled="true"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -53,7 +53,7 @@
             android:label="@string/alias_label_diplaycn"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -64,7 +64,7 @@
             android:label="@string/alias_label_diplay"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -76,7 +76,7 @@
             android:label="@string/alias_label_carpaly"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -88,7 +88,7 @@
             android:label="@string/alias_label_navi"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -100,7 +100,7 @@
             android:label="@string/alias_label_map"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -112,7 +112,7 @@
             android:label="@string/alias_label_link"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -124,7 +124,7 @@
             android:label="@string/alias_label_media"
             android:enabled="false"
             android:exported="true"
-            android:targetActivity="com.shilapi.xcertplay.DiPlayActivity">
+            android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -708,4 +708,32 @@
     <string name="carlife_settings_button">设置</string>
     <string name="carlife_manual_ip_button">IP 连接</string>
     <string name="carlife_manual_ip_hint">无线模式填手机 IP;同机自测填 127.0.0.1(连接本机上的 CarLife 应用)。</string>
+
+    <!-- 碳纤仪表主界面 -->
+    <string name="home_headline">随时可以开始</string>
+    <string name="home_waiting_phone">等待手机接入</string>
+    <string name="home_connect">连接手机</string>
+    <string name="home_cap_video">投屏</string>
+    <string name="home_cap_audio">声音</string>
+    <string name="home_cap_touch">触控</string>
+    <string name="home_usb">有线 USB</string>
+    <string name="home_wireless">无线搜索</string>
+    <string name="home_settings">设置</string>
+    <string name="home_hint_wireless">手机装好 CarLife+,插线或连同一 Wi-Fi。投屏、声音、触控即刻上车。</string>
+    <string name="carlife_pause">暂停投屏</string>
+    <string name="carlife_disconnect">断开</string>
+
+    <!-- CarLife 设置页 -->
+    <string name="settings_title">CarLife 设置</string>
+    <string name="settings_video">视频</string>
+    <string name="settings_picture">画质</string>
+    <string name="settings_brightness">亮度</string>
+    <string name="settings_contrast">对比度</string>
+    <string name="settings_saturation">饱和度</string>
+    <string name="settings_warmth">暖色</string>
+    <string name="settings_behaviour">行为</string>
+    <string name="settings_daynight">夜间模式</string>
+    <string name="settings_autoconnect">插入 USB 自动连接</string>
+    <string name="settings_mic">麦克风上行(语音)</string>
+    <string name="settings_wireless">允许无线连接</string>
 </resources>
