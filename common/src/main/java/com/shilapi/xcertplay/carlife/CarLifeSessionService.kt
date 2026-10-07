@@ -28,10 +28,12 @@ class CarLifeSessionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            isRunning = false
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
+        isRunning = true
         val notification: Notification = if (android.os.Build.VERSION.SDK_INT >= 26) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.carlife_channel_title))
@@ -76,6 +78,11 @@ class CarLifeSessionService : Service() {
         }
     }
 
+    override fun onDestroy() {
+        isRunning = false
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
@@ -83,6 +90,11 @@ class CarLifeSessionService : Service() {
         private const val NOTIFICATION_ID = 0xCA12
 
         const val ACTION_STOP = "com.shihab.diplay.carlife.STOP"
+
+        /** True while the foreground session service is alive (home ring state). */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, CarLifeSessionService::class.java))

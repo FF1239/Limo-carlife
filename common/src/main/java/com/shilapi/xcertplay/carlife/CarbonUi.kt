@@ -260,3 +260,113 @@ class TelemetryBar(context: Context, attrs: AttributeSet? = null) : LinearLayout
         setSpan(android.text.style.ForegroundColorSpan(color), 0, length, 0)
     }
 }
+
+/**
+ * The standby ring: the connection heart of the home screen. Offline it is a
+ * slow radar sweep around a big clock; while searching the sweep brightens
+ * and speeds up; when a session is alive it turns into a green ONLINE arc
+ * with the connected phone's name.
+ */
+class StandbyRingView(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
+    enum class State { OFFLINE, SEARCHING, ONLINE }
+
+    private var state = State.OFFLINE
+    private var clock = "--:--"
+    private var dateLine = ""
+    private var statusLine = "CARLIFE · STANDBY"
+    private var phoneName = ""
+
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; color = Color.parseColor("#1B1E22"); strokeWidth = 0f
+    }
+    private val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; color = CarbonTheme.RED
+    }
+    private val onlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; color = CarbonTheme.ONLINE
+    }
+    private val clockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.CENTER
+    }
+    private val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = CarbonTheme.TEXT_FAINT; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.CENTER
+    }
+    private val statusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = CarbonTheme.RED; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.CENTER
+    }
+    private val arcRect = RectF()
+
+    fun setState(newState: State, phone: String = "") {
+        state = newState
+        phoneName = phone
+        statusLine = when (newState) {
+            State.OFFLINE -> "CARLIFE · STANDBY"
+            State.SEARCHING -> "SEARCHING PHONE…"
+            State.ONLINE -> if (phoneName.isBlank()) "CARLIFE · ONLINE" else phoneName.uppercase()
+        }
+        statusPaint.color = when (newState) {
+            State.ONLINE -> CarbonTheme.ONLINE
+            State.SEARCHING -> Color.parseColor("#FF9500")
+            State.OFFLINE -> CarbonTheme.RED
+        }
+        invalidate()
+    }
+
+    /** Called from the home clock tick so the centre always reads current. */
+    fun setClock(time: String, date: String) {
+        clock = time
+        dateLine = date
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val radius = min(width, height) / 2f - dp(14f)
+        val stroke = dp(9f)
+
+        // base ring
+        trackPaint.strokeWidth = stroke
+        canvas.drawCircle(cx, cy, radius, trackPaint)
+
+        // sweep / online arc
+        sweepPaint.strokeWidth = stroke
+        onlinePaint.strokeWidth = stroke
+        arcRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
+        when (state) {
+            State.ONLINE -> {
+                onlinePaint.setShadowLayer(dp(8f), 0f, 0f, 0x662EE06C)
+                canvas.drawArc(arcRect, -90f, 270f, false, onlinePaint)
+            }
+
+            State.SEARCHING -> {
+                val angle = (System.currentTimeMillis() % 1600) / 1600f * 360f
+                sweepPaint.color = CarbonTheme.RED
+                sweepPaint.setShadowLayer(dp(10f), 0f, 0f, 0x88E1062C)
+                canvas.drawArc(arcRect, angle, 70f, false, sweepPaint)
+                postInvalidateOnAnimation()
+            }
+
+            State.OFFLINE -> {
+                val angle = (System.currentTimeMillis() % 9000) / 9000f * 360f
+                sweepPaint.color = 0x59E1062C.toInt()
+                sweepPaint.setShadowLayer(0f, 0f, 0f, 0)
+                canvas.drawArc(arcRect, angle, 50f, false, sweepPaint)
+                postInvalidateOnAnimation()
+            }
+        }
+
+        // centre: clock / date / status
+        clockPaint.textSize = dp(if (dateLine.isBlank()) 40f else 44f)
+        val clockY = cy - dp(if (dateLine.isBlank()) 2f else 8f)
+        canvas.drawText(clock, cx, clockY, clockPaint)
+        if (dateLine.isNotBlank()) {
+            datePaint.textSize = dp(12f)
+            canvas.drawText(dateLine, cx, clockY + dp(26f), datePaint)
+        }
+        statusPaint.textSize = dp(12f)
+        canvas.drawText(statusLine, cx, cy + dp(if (dateLine.isBlank()) 34f else 54f), statusPaint)
+    }
+
+    private fun dp(v: Float): Float = v * resources.displayMetrics.density
+}

@@ -30,7 +30,7 @@ class CarLifeHomeActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var statusChip: TextView? = null
     private var connectButton: View? = null
-    private lateinit var gauge: GaugeView
+    private lateinit var ring: StandbyRingView
     private lateinit var ticker: TelemetryBar
     private lateinit var clockView: TextView
 
@@ -38,6 +38,7 @@ class CarLifeHomeActivity : Activity() {
         override fun run() {
             val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             clockView.text = "SYS $now"
+            ring.setClock(now, SimpleDateFormat("MM月dd日 E", Locale.getDefault()).format(Date()))
             ticker.update("SYS", now)
             main.postDelayed(this, 15_000)
         }
@@ -174,9 +175,8 @@ class CarLifeHomeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
-        gauge = GaugeView(this)
-        gauge.setGauge(0, "—", 0, isStandby = true)
-        right.addView(gauge, LinearLayout.LayoutParams(dp(270), dp(270)))
+        ring = StandbyRingView(this)
+        right.addView(ring, LinearLayout.LayoutParams(dp(270), dp(270)))
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
         }
@@ -304,6 +304,18 @@ class CarLifeHomeActivity : Activity() {
             }
         }
         startActivity(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The ring mirrors the live session: green arc + phone name while a
+        // CarLife session service is running, radar-standby otherwise.
+        val persistence = CarLifePersistence.get(this)
+        if (CarLifeSessionService.isRunning) {
+            ring.setState(StandbyRingView.State.ONLINE, persistence.lastPhone() ?: "")
+        } else {
+            ring.setState(StandbyRingView.State.OFFLINE)
+        }
     }
 
     override fun onDestroy() {
