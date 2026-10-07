@@ -2,12 +2,17 @@ package com.shilapi.xcertplay.carlife
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.View
@@ -47,6 +52,116 @@ object CarbonTheme {
             setStroke((1 * context.resources.displayMetrics.density).toInt(), HAIRLINE)
             setColor(PANEL)
         }
+}
+
+/**
+ * Programmatic carbon-fibre twill tile (the C3.0 background): a 20dp repeat
+ * of 2x2 blocks, each with a diagonal sheen band and a hairline edge, tiled
+ * to fill any surface. Generated once and cached.
+ */
+object CarbonWeave {
+    @Volatile
+    private var cache: BitmapDrawable? = null
+
+    fun tile(context: Context): BitmapDrawable {
+        cache?.let { return it }
+        val density = context.resources.displayMetrics.density
+        val size = (20 * density).toInt().coerceAtLeast(20)
+        val half = (size / 2f)
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        canvas.drawColor(Color.parseColor("#111316"))
+        val block = Paint().apply { color = Color.parseColor("#14161a") }
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = maxOf(1f, density * 0.5f)
+            color = Color.parseColor("#191b1f")
+        }
+        val sheen = Paint().apply { isDither = true }
+        val thread = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            strokeWidth = maxOf(1f, density * 0.8f)
+        }
+        for (row in 0..1) for (col in 0..1) {
+            val l = col * half
+            val t = row * half
+            sheen.shader = LinearGradient(
+                l, t + half, l + half, t,
+                Color.parseColor("#191c21"), Color.parseColor("#0e1013"),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRect(l, t, l + half, t + half, block)
+            canvas.drawRect(l, t, l + half, t + half, sheen)
+            // Weave direction alternates per block, like a real twill.
+            if ((row + col) % 2 == 0) {
+                thread.color = Color.parseColor("#1b1e23")
+                canvas.drawLine(l, t + half, l + half, t, thread)
+            } else {
+                thread.color = Color.parseColor("#0d0f12")
+                canvas.drawLine(l, t, l + half, t + half, thread)
+            }
+            canvas.drawRect(l, t, l + half, t + half, edge)
+        }
+        val drawable = BitmapDrawable(context.resources, bmp).apply {
+            tileModeX = Shader.TileMode.REPEAT
+            tileModeY = Shader.TileMode.REPEAT
+        }
+        cache = drawable
+        return drawable
+    }
+}
+
+/**
+ * The skewed CTA from the C3.0 design: a parallelogram with the accent
+ * gradient, soft red glow and letter-spaced label. Clickable.
+ */
+class SkewCtaView(context: Context) : View(context) {
+    var label: String = ""
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var onAction: (() -> Unit)? = null
+
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT_BOLD
+    }
+    private val path = Path()
+
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null)  // soft glow needs software
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onAction?.invoke() }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val skew = h * 0.25f
+        fill.setShadowLayer(dp(16f), 0f, dp(5f), 0x66E1062C)
+        fill.shader = LinearGradient(
+            0f, 0f, w, 0f,
+            CarbonTheme.RED, Color.parseColor("#a80b21"),
+            Shader.TileMode.CLAMP,
+        )
+        path.reset()
+        path.moveTo(skew, 0f)
+        path.lineTo(w, 0f)
+        path.lineTo(w - skew, h)
+        path.lineTo(0f, h)
+        path.close()
+        canvas.drawPath(path, fill)
+        textPaint.textSize = dp(17f)
+        textPaint.letterSpacing = 0.18f
+        val cy = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(label, w / 2f, cy, textPaint)
+    }
+
+    private fun dp(v: Float): Float = v * resources.displayMetrics.density
 }
 
 /**
@@ -341,7 +456,11 @@ class StandbyRingView(context: Context, attrs: AttributeSet? = null) : View(cont
 
             State.SEARCHING -> {
                 val angle = (System.currentTimeMillis() % 1600) / 1600f * 360f
-                sweepPaint.color = CarbonTheme.RED
+                sweepPaint.shader = LinearGradient(
+                    cx - radius, cy - radius, cx + radius, cy + radius,
+                    CarbonTheme.RED, Color.parseColor("#FF9500"),
+                    Shader.TileMode.CLAMP,
+                )
                 sweepPaint.setShadowLayer(dp(10f), 0f, 0f, 0x88E1062C)
                 canvas.drawArc(arcRect, angle, 70f, false, sweepPaint)
                 postInvalidateOnAnimation()
@@ -349,7 +468,11 @@ class StandbyRingView(context: Context, attrs: AttributeSet? = null) : View(cont
 
             State.OFFLINE -> {
                 val angle = (System.currentTimeMillis() % 9000) / 9000f * 360f
-                sweepPaint.color = 0x59E1062C.toInt()
+                sweepPaint.shader = LinearGradient(
+                    cx - radius, cy - radius, cx + radius, cy + radius,
+                    CarbonTheme.RED, Color.parseColor("#FF9500"),
+                    Shader.TileMode.CLAMP,
+                )
                 sweepPaint.setShadowLayer(0f, 0f, 0f, 0)
                 canvas.drawArc(arcRect, angle, 50f, false, sweepPaint)
                 postInvalidateOnAnimation()

@@ -27,7 +27,7 @@ class CarLifeSettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         CarbonTheme.load(this)
 
-        val scroll = android.widget.ScrollView(this).apply { setBackgroundColor(BG) }
+        val scroll = android.widget.ScrollView(this).apply { background = CarbonWeave.tile(this@CarLifeSettingsActivity) }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(28), dp(18), dp(28), dp(28))

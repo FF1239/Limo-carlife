@@ -104,7 +104,7 @@ class CarLifeHomeActivity : Activity() {
     }
 
     private fun buildUi() {
-        val root = FrameLayout(this).apply { setBackgroundColor(CarbonTheme.BG) }
+        val root = FrameLayout(this).apply { background = CarbonWeave.tile(this@CarLifeHomeActivity) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(column, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -168,7 +168,10 @@ class CarLifeHomeActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(16), 0, 0)
         }, wrap())
-        connectButton = cta(getString(R.string.home_connect)) { openProjection(wired = null) }
+        connectButton = SkewCtaView(this).apply {
+            label = getString(R.string.home_connect)
+            onAction = { openProjection(wired = null) }
+        }
         hero.addView(connectButton, LinearLayout.LayoutParams(
             dp(400), dp(56)).apply { topMargin = dp(28) })
         val caps = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -272,25 +275,6 @@ class CarLifeHomeActivity : Activity() {
             letterSpacing = 0.14f
             setPadding(dp(8), 0, 0, 0)
         })
-    }
-
-    private fun cta(text: String, onClick: () -> Unit): View = FrameLayout(this).apply {
-        background = GradientDrawable().apply {
-            cornerRadius = 0f
-            setColor(CarbonTheme.RED)
-        }
-        addView(TextView(this@CarLifeHomeActivity).apply {
-            this.text = text
-            setTextColor(Color.WHITE)
-            textSize = 17f
-            letterSpacing = 0.22f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { onClick() }
     }
 
     private fun label(text: String, color: Int, size: Float, spacing: Float): TextView =
