@@ -722,4 +722,7 @@
     <string name="log_export_failed">Пока нечего экспортировать</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_version_row">Версия %1$s · канал CarLife</string>
+    <string name="widget_navi_label">Помощник CarLife</string>
+    <string name="widget_wait_phone">Ожидание телефона…</string>
+    <string name="widget_no_media">Включите музыку на телефоне</string>
 </resources>

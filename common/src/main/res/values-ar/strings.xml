@@ -723,4 +723,7 @@
     <string name="log_export_failed">لا شيء للتصدير بعد</string>
     <string name="settings_about">حول</string>
     <string name="settings_version_row">الإصدار %1$s · قناة CarLife</string>
+    <string name="widget_navi_label">مساعد CarLife</string>
+    <string name="widget_wait_phone">بانتظار الهاتف…</string>
+    <string name="widget_no_media">شغّل الموسيقى على الهاتف</string>
 </resources>

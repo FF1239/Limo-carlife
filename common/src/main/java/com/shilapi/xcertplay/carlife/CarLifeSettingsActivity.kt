@@ -56,6 +56,8 @@ class CarLifeSettingsActivity : Activity() {
             }, rowParams(index, CarLifePersistence.RESOLUTION_PRESETS.size))
         }
         column.addView(resPanel)
+        // custom canvas scale (DiPlay 0.2.12 parity: 30%-160% around the unit base)
+        column.addView(scaleSlider())
 
         // picture section
         column.addView(panelTitle(getString(R.string.settings_picture), dp(26), dp(10)))
@@ -341,6 +343,62 @@ class CarLifeSettingsActivity : Activity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    /**
+     * 30%-160% canvas scale around the 1920x720 unit base (0.2.12 parity);
+     * presets stay available, this writes a computed WxH on release.
+     */
+    private fun scaleSlider(): View {
+        val baseW = 1920
+        val baseH = 720
+        val caption = TextView(this).apply {
+            text = labelFor(persistence.videoWidth(), persistence.videoHeight())
+            setTextColor(TEXT_DIM)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, dp(10), 0, 0)
+        }
+        val startPct = ((persistence.videoWidth() * 100f) / baseW).toInt().coerceIn(30, 160)
+        val bar = SeekBar(this).apply {
+            max = 26   // (160-30)/5
+            progress = (startPct - 30) / 5
+        }
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val pct = 30 + progress * 5
+                val w = ((baseW * pct) / 100 / 2 * 2).coerceAtLeast(320)
+                val h = ((baseH * pct) / 100 / 2 * 2).coerceAtLeast(200)
+                caption.text = labelFor(w, h)
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                val pct = 30 + (sb?.progress ?: 0) * 5
+                val w = ((baseW * pct) / 100 / 2 * 2).coerceAtLeast(320)
+                val h = ((baseH * pct) / 100 / 2 * 2).coerceAtLeast(200)
+                persistence.saveVideo(w, h, persistence.videoFrameRate())
+            }
+        })
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        holder.addView(TextView(this).apply {
+            text = getString(R.string.settings_custom_scale)
+            setTextColor(TEXT_DIM)
+            textSize = 13f
+            letterSpacing = 0.18f
+            setPadding(0, dp(14), 0, 0)
+        })
+        holder.addView(caption)
+        holder.addView(bar, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return holder
+    }
+
+    private fun labelFor(w: Int, h: Int): String {
+        val pct = (w * 100f / 1920).toInt()
+        return "→ ${w}×${h} · $pct%"
+    }
 
     /** Wide action chip used by the log/about rows. */
     private fun actionChip(label: String, onClick: () -> Unit): View = android.widget.Button(this).apply {

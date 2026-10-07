@@ -773,4 +773,7 @@
     <string name="log_export_failed">Nothing to export yet</string>
     <string name="settings_about">About</string>
     <string name="settings_version_row">Version %1$s · CarLife channel</string>
+    <string name="widget_navi_label">CarLife companion</string>
+    <string name="widget_wait_phone">Waiting for the phone…</string>
+    <string name="widget_no_media">Play music on the phone</string>
 </resources>

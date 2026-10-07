@@ -136,6 +136,7 @@ class CarLifeEngine(
         tcp = null
         releaseVideo()
         releaseAudio()
+        CarLifeNaviWidget.clear(context)
         emitState("stopped")
     }
 
@@ -399,6 +400,9 @@ class CarLifeEngine(
 
     override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
         lastMediaInfo = info
+        CarLifeNaviWidget.updateMedia(
+            context, info.song.ifBlank { "" }, info.artist.ifBlank { "" },
+        )
         uiListener.onMediaInfo(info)
     }
 
@@ -421,6 +425,9 @@ class CarLifeEngine(
     }
 
     override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) {
+        CarLifeNaviWidget.updateNavi(
+            context, info.roadName, if (info.remainDistance > 0) "${info.remainDistance} m" else "",
+        )
         uiListener.onNaviInfo(info)
     }
 

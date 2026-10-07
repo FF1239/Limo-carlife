@@ -1,0 +1,84 @@
+<resources>
+    <!-- CarLife 通道 -->
+    <string name="carlife_channel_title">CarLife 頻道</string>
+    <string name="carlife_connecting">正在連線 CarLife…</string>
+    <string name="carlife_projecting">CarLife 投影中</string>
+    <string name="carlife_disconnected">CarLife 已斷線(%1$s)</string>
+    <string name="carlife_state">CarLife:%1$s</string>
+    <string name="carlife_wired_connect">有線(USB)</string>
+    <string name="carlife_wireless_connect">無線連線</string>
+    <string name="carlife_wireless_need_same_network">請讓車機與手機處於同一 Wi-Fi 網路,在手機 CarLife 應用點擊「無線連線」後再搜尋。</string>
+    <string name="carlife_searching_phone">正在搜尋 CarLife 手機…</string>
+    <string name="carlife_phone_found">已找到手機:%1$s</string>
+    <string name="carlife_phone_not_found">未在同一網路中找到 CarLife 手機。請插入 USB 線,或改用 IP 連線。</string>
+    <string name="carlife_stop">停止 CarLife</string>
+    <string name="carlife_wireless_mode">無線連線</string>
+    <string name="carlife_settings_button">設定</string>
+    <string name="carlife_manual_ip_button">IP 連線</string>
+    <string name="carlife_manual_ip_hint">無線模式填手機 IP;同機自測填 127.0.0.1(連線本機上的 CarLife 應用)。</string>
+
+    <!-- 碳纖儀表主介面 -->
+    <string name="home_headline">隨時可以開始</string>
+    <string name="home_waiting_phone">等待手機接入</string>
+    <string name="home_connect">連線手機</string>
+    <string name="home_cap_video">投影</string>
+    <string name="home_cap_audio">聲音</string>
+    <string name="home_cap_touch">觸控</string>
+    <string name="home_usb">有線 USB</string>
+    <string name="home_wireless">無線搜尋</string>
+    <string name="home_settings">設定</string>
+    <string name="home_carplay">CarPlay</string>
+    <string name="home_hint_wireless">手機裝好 CarLife+,插線或連同一 Wi-Fi。投影、聲音、觸控即刻上車。</string>
+
+    <!-- CarLife 設定頁 -->
+    <string name="settings_title">CarLife 設定</string>
+    <string name="settings_video">影片</string>
+    <string name="settings_picture">畫質</string>
+    <string name="settings_brightness">亮度</string>
+    <string name="settings_contrast">對比</string>
+    <string name="settings_saturation">飽和度</string>
+    <string name="settings_warmth">暖色</string>
+    <string name="settings_behaviour">行為</string>
+    <string name="settings_daynight">夜間模式</string>
+    <string name="settings_daynight_auto">自動(光線感應器)</string>
+    <string name="settings_daynight_day">白天</string>
+    <string name="settings_daynight_night">夜間</string>
+    <string name="settings_autoconnect">插入 USB 自動連線</string>
+    <string name="settings_mic">麥克風上行(語音)</string>
+    <string name="settings_wireless">允許無線連線</string>
+    <string name="settings_demo_data">示範資料(無真實車速來源時模擬)</string>
+    <string name="settings_session_log">工作階段日誌</string>
+    <string name="settings_log_none">尚未產生,連線一次後出現。</string>
+    <string name="settings_export_log">匯出工作階段日誌</string>
+    <string name="log_exported">已匯出到下載:%1$s</string>
+    <string name="log_export_failed">暫無可匯出的日誌</string>
+    <string name="settings_sound">聲音</string>
+    <string name="settings_tts_volume">導航語音音量</string>
+    <string name="settings_appearance">外觀</string>
+    <string name="settings_accent_red">紅</string>
+    <string name="settings_accent_blue">藍</string>
+    <string name="settings_accent_orange">橙</string>
+    <string name="settings_about">關於</string>
+    <string name="settings_check_update">檢查更新</string>
+    <string name="settings_language">應用程式語言</string>
+    <string name="settings_custom_scale">自訂畫面縮放</string>
+    <string name="settings_version_row">版本 %1$s · CarLife 頻道</string>
+
+    <!-- 狀態與操作 -->
+    <string name="state_scanning">正在掃描 USB 上的 CarLife 手機…</string>
+    <string name="state_wireless_connecting">無線連線中(%1$s)…</string>
+    <string name="state_reconnecting">連線中斷,重連中(%1$s)</string>
+    <string name="state_watchdog">畫面無資料,正在重建工作階段…</string>
+    <string name="carlife_resume">繼續投影</string>
+    <string name="carlife_screenshot">螢幕截圖</string>
+    <string name="screenshot_saved">已儲存:%1$s</string>
+    <string name="screenshot_failed">截圖失敗</string>
+    <string name="media_unknown_song">未知曲目</string>
+    <string name="media_unknown_artist">未知藝人</string>
+    <string name="navi_turn_ahead">前方轉向</string>
+
+    <!-- 小工具 -->
+    <string name="widget_navi_label">CarLife 助手</string>
+    <string name="widget_wait_phone">等待手機接入…</string>
+    <string name="widget_no_media">在手机上播放音樂</string>
+</resources>

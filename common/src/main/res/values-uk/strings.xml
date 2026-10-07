@@ -734,4 +734,7 @@
     <string name="log_export_failed">Поки немає що експортувати</string>
     <string name="settings_about">Про застосунок</string>
     <string name="settings_version_row">Версія %1$s · канал CarLife</string>
+    <string name="widget_navi_label">Помічник CarLife</string>
+    <string name="widget_wait_phone">Очікування телефона…</string>
+    <string name="widget_no_media">Увімкніть музику на телефоні</string>
 </resources>

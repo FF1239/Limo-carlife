@@ -773,4 +773,7 @@
     <string name="log_export_failed">暂无可导出的日志</string>
     <string name="settings_about">关于</string>
     <string name="settings_version_row">版本 %1$s · CarLife 通道</string>
+    <string name="widget_navi_label">CarLife 助手</string>
+    <string name="widget_wait_phone">等待手机接入…</string>
+    <string name="widget_no_media">在手机上播放音乐</string>
 </resources>
