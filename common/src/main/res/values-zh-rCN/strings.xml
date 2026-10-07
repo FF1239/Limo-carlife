@@ -702,7 +702,7 @@
     <string name="carlife_wireless_need_same_network">请让车机与手机处于同一 Wi-Fi 网络，在手机 CarLife 应用中点击「无线连接」后再搜索。</string>
     <string name="carlife_searching_phone">正在搜索 CarLife 手机…</string>
     <string name="carlife_phone_found">已找到手机：%1$s</string>
-    <string name="carlife_phone_not_found">未在同一网络中找到 CarLife 手机。</string>
+    <string name="carlife_phone_not_found">未在同一网络中找到 CarLife 手机。请插入 USB 线,或改用 IP 连接。</string>
     <string name="carlife_stop">停止 CarLife</string>
     <string name="carlife_wireless_mode">无线连接</string>
     <string name="carlife_settings_button">设置</string>
@@ -765,4 +765,12 @@
     <string name="media_unknown_song">未知曲目</string>
     <string name="media_unknown_artist">未知艺人</string>
     <string name="navi_turn_ahead">前方转向</string>
+    <string name="settings_check_update">检查更新</string>
+    <string name="settings_language">应用语言</string>
+    <string name="settings_custom_scale">自定义画面缩放</string>
+    <string name="settings_export_log">导出会话日志</string>
+    <string name="log_exported">已导出到下载:%1$s</string>
+    <string name="log_export_failed">暂无可导出的日志</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version_row">版本 %1$s · CarLife 通道</string>
 </resources>

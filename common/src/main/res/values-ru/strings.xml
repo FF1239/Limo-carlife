@@ -657,7 +657,7 @@
     <string name="carlife_wireless_need_same_network">Подключите магнитолу и телефон к одной сети Wi-Fi, нажмите 无线连接 в приложении CarLife и выполните поиск.</string>
     <string name="carlife_searching_phone">Поиск телефона CarLife…</string>
     <string name="carlife_phone_found">Телефон найден: %1$s</string>
-    <string name="carlife_phone_not_found">Телефон CarLife в этой сети не найден.</string>
+    <string name="carlife_phone_not_found">Телефон CarLife в этой сети не найден. Подключите USB-кабель или используйте подключение по IP.</string>
     <string name="carlife_stop">Остановить CarLife</string>
     <string name="carlife_wireless_mode">Беспроводное подключение</string>
     <string name="carlife_settings_button">Настройки</string>
@@ -714,4 +714,12 @@
     <string name="media_unknown_song">Неизвестный трек</string>
     <string name="media_unknown_artist">Неизвестный исполнитель</string>
     <string name="navi_turn_ahead">Поворот впереди</string>
+    <string name="settings_check_update">Проверить обновления</string>
+    <string name="settings_language">Язык приложения</string>
+    <string name="settings_custom_scale">Свой масштаб холста</string>
+    <string name="settings_export_log">Экспортировать журнал сеанса</string>
+    <string name="log_exported">Экспортировано в Загрузки: %1$s</string>
+    <string name="log_export_failed">Пока нечего экспортировать</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_version_row">Версия %1$s · канал CarLife</string>
 </resources>

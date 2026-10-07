@@ -657,7 +657,7 @@
     <string name="carlife_wireless_need_same_network">Conecta la unidad y el teléfono a la misma red Wi-Fi, pulsa 无线连接 en la app CarLife y busca.</string>
     <string name="carlife_searching_phone">Buscando el teléfono CarLife…</string>
     <string name="carlife_phone_found">Teléfono encontrado: %1$s</string>
-    <string name="carlife_phone_not_found">No se encontró ningún teléfono CarLife en esta red.</string>
+    <string name="carlife_phone_not_found">No se encontró ningún teléfono CarLife en esta red. Conecta un cable USB o usa la conexión por IP.</string>
     <string name="carlife_stop">Detener CarLife</string>
     <string name="carlife_wireless_mode">Conexión inalámbrica</string>
     <string name="carlife_settings_button">Ajustes</string>
@@ -714,4 +714,12 @@
     <string name="media_unknown_song">Pista desconocida</string>
     <string name="media_unknown_artist">Artista desconocido</string>
     <string name="navi_turn_ahead">Giro próximo</string>
+    <string name="settings_check_update">Buscar actualizaciones</string>
+    <string name="settings_language">Idioma de la app</string>
+    <string name="settings_custom_scale">Escala personalizada del lienzo</string>
+    <string name="settings_export_log">Exportar registro de sesión</string>
+    <string name="log_exported">Exportado a Descargas: %1$s</string>
+    <string name="log_export_failed">Nada que exportar todavía</string>
+    <string name="settings_about">Acerca de</string>
+    <string name="settings_version_row">Versión %1$s · canal CarLife</string>
 </resources>

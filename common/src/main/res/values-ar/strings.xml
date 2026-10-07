@@ -658,7 +658,7 @@
     <string name="carlife_wireless_need_same_network">اربط الوحدة والهاتف بشبكة Wi-Fi نفسها، ثم اضغط 无线连接 في تطبيق CarLife وابحث.</string>
     <string name="carlife_searching_phone">جارٍ البحث عن هاتف CarLife…</string>
     <string name="carlife_phone_found">تم العثور على الهاتف: %1$s</string>
-    <string name="carlife_phone_not_found">لم يُعثر على هاتف CarLife في هذه الشبكة.</string>
+    <string name="carlife_phone_not_found">لم يُعثر على هاتف CarLife في هذه الشبكة. وصّل كبل USB أو استخدم الاتصال بـ IP.</string>
     <string name="carlife_stop">إيقاف CarLife</string>
     <string name="carlife_wireless_mode">اتصال لاسلكي</string>
     <string name="carlife_settings_button">الإعدادات</string>
@@ -715,4 +715,12 @@
     <string name="media_unknown_song">مقطوعة غير معروفة</string>
     <string name="media_unknown_artist">فنان غير معروف</string>
     <string name="navi_turn_ahead">انعطاف قادم</string>
+    <string name="settings_check_update">التحقق من التحديثات</string>
+    <string name="settings_language">لغة التطبيق</string>
+    <string name="settings_custom_scale">مقياس مخصص للوحة</string>
+    <string name="settings_export_log">تصدير سجل الجلسة</string>
+    <string name="log_exported">تم التصدير إلى التنزيلات: %1$s</string>
+    <string name="log_export_failed">لا شيء للتصدير بعد</string>
+    <string name="settings_about">حول</string>
+    <string name="settings_version_row">الإصدار %1$s · قناة CarLife</string>
 </resources>

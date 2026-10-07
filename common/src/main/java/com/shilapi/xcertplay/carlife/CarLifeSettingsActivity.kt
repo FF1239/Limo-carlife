@@ -131,7 +131,27 @@ class CarLifeSettingsActivity : Activity() {
             textSize = 12f
             typeface = Typeface.MONOSPACE
         })
+        behaviourPanel.addView(actionChip(getString(R.string.settings_export_log)) { exportLog() })
         column.addView(behaviourPanel)
+
+        // about section (reuses the app-wide updater/locale, CarLife entry points)
+        column.addView(panelTitle(getString(R.string.settings_about), dp(26), dp(10)))
+        val aboutPanel = panel()
+        aboutPanel.addView(actionChip(getString(R.string.settings_language)) {
+            com.shilapi.xcertplay.AppLocale.showPicker(this)
+        })
+        aboutPanel.addView(actionChip(getString(R.string.settings_check_update)) { checkUpdate() })
+        aboutPanel.addView(TextView(this).apply {
+            text = getString(
+                R.string.settings_version_row,
+                com.shilapi.xcertplay.AppUpdate.currentVersion(context),
+            )
+            setTextColor(TEXT_DIM)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, dp(10), 0, dp(2))
+        })
+        column.addView(aboutPanel)
 
         // sound section
         column.addView(panelTitle(getString(R.string.settings_sound), dp(26), dp(10)))
@@ -321,6 +341,61 @@ class CarLifeSettingsActivity : Activity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    /** Wide action chip used by the log/about rows. */
+    private fun actionChip(label: String, onClick: () -> Unit): View = android.widget.Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 14f
+        setTextColor(TEXT)
+        background = GradientDrawable().apply {
+            cornerRadius = 0f
+            setColor(Color.parseColor("#1D2024"))
+            setStroke(dp(1), HAIRLINE)
+        }
+        stateListAnimator = null
+        setPadding(dp(16), dp(10), dp(16), dp(10))
+        setOnClickListener { onClick() }
+    }
+
+    /** Copies the current session log into Downloads so it survives without adb. */
+    private fun exportLog() {
+        val src = CarLifeSessionLog.currentFile()
+        if (src == null || !src.isFile) {
+            android.widget.Toast.makeText(this, getString(R.string.log_export_failed), android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        runCatching {
+            val dir = android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS,
+            ).apply { mkdirs() }
+            val dst = java.io.File(dir, src.name)
+            src.copyTo(dst, overwrite = true)
+            android.widget.Toast.makeText(this, getString(R.string.log_exported, dst.name), android.widget.Toast.LENGTH_LONG).show()
+        }.onFailure {
+            android.widget.Toast.makeText(this, getString(R.string.log_export_failed), android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Reuses the app-wide updater from the CarLife settings entry point. */
+    private fun checkUpdate() {
+        android.widget.Toast.makeText(this, getString(R.string.state_scanning), android.widget.Toast.LENGTH_SHORT).show()
+        com.shilapi.xcertplay.AppUpdate.check { release, error ->
+            runOnUiThread {
+                val message = when {
+                    release != null && com.shilapi.xcertplay.AppUpdate.isAvailable(release, this) ->
+                        getString(com.shilapi.xcertplay.host.R.string.update_available, release.tag)
+                    release != null -> getString(com.shilapi.xcertplay.host.R.string.up_to_date)
+                    else -> "${getString(R.string.settings_check_update)}: $error"
+                }
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.settings_check_update))
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            }
+        }
+    }
 
     companion object {
         private val BG = Color.parseColor("#0F1114")

@@ -398,11 +398,26 @@ class CarLifeEngine(
     }
 
     override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
+        lastMediaInfo = info
         uiListener.onMediaInfo(info)
     }
 
     override fun onMediaProgress(percent: Int) {
+        lastProgressPct = percent
         uiListener.onMediaProgress(percent)
+    }
+
+    // ---- media play-state mirror (session publish unavailable: stripped jar) ----
+
+    private var lastMediaInfo: CarLifeMessages.MediaInfo? = null
+    private var lastProgressPct = 0
+
+    @Volatile
+    private var mediaPlaying = false
+
+    /** Phone-side play state, toggled by the head-unit media bar. */
+    fun setMediaPlaying(playing: Boolean) {
+        mediaPlaying = playing
     }
 
     override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) {

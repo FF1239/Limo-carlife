@@ -702,7 +702,7 @@
     <string name="carlife_wireless_need_same_network">Connect the car and the phone to the same Wi-Fi network, tap 无线连接 in the CarLife app, then search.</string>
     <string name="carlife_searching_phone">Searching for the CarLife phone…</string>
     <string name="carlife_phone_found">Phone found: %1$s</string>
-    <string name="carlife_phone_not_found">No CarLife phone found on this network.</string>
+    <string name="carlife_phone_not_found">No CarLife phone found on this network. Plug in a USB cable, or use IP connect.</string>
     <string name="carlife_stop">Stop CarLife</string>
     <string name="carlife_wireless_mode">Wireless connection</string>
     <string name="carlife_settings_button">Settings</string>
@@ -765,4 +765,12 @@
     <string name="media_unknown_song">Unknown track</string>
     <string name="media_unknown_artist">Unknown artist</string>
     <string name="navi_turn_ahead">Turn ahead</string>
+    <string name="settings_check_update">Check for updates</string>
+    <string name="settings_language">App language</string>
+    <string name="settings_custom_scale">Custom canvas scale</string>
+    <string name="settings_export_log">Export session log</string>
+    <string name="log_exported">Exported to Downloads: %1$s</string>
+    <string name="log_export_failed">Nothing to export yet</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version_row">Version %1$s · CarLife channel</string>
 </resources>

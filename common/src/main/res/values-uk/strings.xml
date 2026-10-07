@@ -669,7 +669,7 @@
     <string name="carlife_wireless_need_same_network">Зʼєднайте магнітолу й телефон з однією мережею Wi-Fi, натисніть 无线连接 у застосунку CarLife і виконайте пошук.</string>
     <string name="carlife_searching_phone">Пошук телефона CarLife…</string>
     <string name="carlife_phone_found">Телефон знайдено: %1$s</string>
-    <string name="carlife_phone_not_found">Телефон CarLife у цій мережі не знайдено.</string>
+    <string name="carlife_phone_not_found">Телефон CarLife у цій мережі не знайдено. Підключіть USB-кабель або скористайтеся зʼєднанням за IP.</string>
     <string name="carlife_stop">Зупинити CarLife</string>
     <string name="carlife_wireless_mode">Бездротове підключення</string>
     <string name="carlife_settings_button">Налаштування</string>
@@ -726,4 +726,12 @@
     <string name="media_unknown_song">Невідомий трек</string>
     <string name="media_unknown_artist">Невідомий виконавець</string>
     <string name="navi_turn_ahead">Поворот попереду</string>
+    <string name="settings_check_update">Перевірити оновлення</string>
+    <string name="settings_language">Мова застосунку</string>
+    <string name="settings_custom_scale">Власний масштаб полотна</string>
+    <string name="settings_export_log">Експортувати журнал сеансу</string>
+    <string name="log_exported">Експортовано до Завантажень: %1$s</string>
+    <string name="log_export_failed">Поки немає що експортувати</string>
+    <string name="settings_about">Про застосунок</string>
+    <string name="settings_version_row">Версія %1$s · канал CarLife</string>
 </resources>

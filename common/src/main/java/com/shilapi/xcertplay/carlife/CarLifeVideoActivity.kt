@@ -362,8 +362,7 @@ class CarLifeVideoActivity : Activity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             gravity = Gravity.CENTER
         }) {
-            settingsPanel.visibility =
-                if (settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            setVisibleAnimated(settingsPanel, settingsPanel.visibility != View.VISIBLE)
         })
         root.addView(column, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -617,14 +616,25 @@ class CarLifeVideoActivity : Activity() {
     private fun toggleMediaPlay() {
         mediaPlaying = !mediaPlaying
         engine?.sendHardKey(if (mediaPlaying) CarLife.HardKey.MEDIA_START else CarLife.HardKey.MEDIA_STOP)
+        engine?.setMediaPlaying(mediaPlaying)
         val glyph = if (mediaPlaying) "❚❚" else "►"
         mediaPlayLabel.text = glyph
         expPlayLabel.text = glyph
     }
 
     private fun toggleMediaPanel() {
-        mediaExpanded.visibility =
-            if (mediaExpanded.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        setVisibleAnimated(mediaExpanded, mediaExpanded.visibility != View.VISIBLE)
+    }
+
+    /** DiPlay-style 300ms fade for overlay panels instead of hard visibility cuts. */
+    private fun setVisibleAnimated(view: View, visible: Boolean) {
+        if (visible == (view.visibility == View.VISIBLE) && view.alpha == 1f) return
+        view.animate()
+            .alpha(if (visible) 1f else 0f)
+            .setDuration(300)
+            .withStartAction { if (visible) view.visibility = View.VISIBLE }
+            .withEndAction { if (!visible) view.visibility = View.GONE }
+            .start()
     }
 
     /** Letterboxes the projection inside the full screen (no stretching). */
