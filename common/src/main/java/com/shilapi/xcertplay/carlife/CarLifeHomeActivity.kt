@@ -47,6 +47,7 @@ class CarLifeHomeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CarbonTheme.load(this)
+        installCrashCapture()
         buildUi()
         main.post(clockTick)
         ticker.update("LINK", "OFFLINE", red = true)
@@ -72,6 +73,18 @@ class CarLifeHomeActivity : Activity() {
     private fun openProjectionWhenAutoConnect() {
         if (CarLifePersistence.get(this).autoConnect()) {
             openProjection(wired = true)
+        }
+    }
+
+    /** Writes any uncaught crash into the session log before the process dies. */
+    private fun installCrashCapture() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            CarLifeSessionLog.log(
+                this, "CRASH",
+                "${thread.name}: ${android.util.Log.getStackTraceString(throwable)}",
+            )
+            previous?.uncaughtException(thread, throwable)
         }
     }
 

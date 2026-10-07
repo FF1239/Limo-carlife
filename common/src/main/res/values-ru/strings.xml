@@ -706,4 +706,9 @@
     <string name="settings_daynight_night">Ночь</string>
     <string name="settings_session_log">Журнал сеанса</string>
     <string name="settings_log_none">Файла ещё нет — появится после первого подключения.</string>
+    <string name="carlife_quick_navi">Навигация</string>
+    <string name="carlife_quick_music">Музыка</string>
+    <string name="carlife_quick_foreground">Экран телефона</string>
+    <string name="settings_sound">Звук</string>
+    <string name="settings_tts_volume">Громкость голоса навигации</string>
 </resources>

@@ -41,6 +41,9 @@ class CarLifeEngine(
 
     /** Phone GNSS fix (subscribed after handshake); speed is cm/s. */
     fun onCarGps(gps: CarLifeMessages.CarGps) {}
+
+    /** Playback progress percent 0..100 for the media card. */
+    fun onMediaProgress(percent: Int) {}
     }
 
     /** WIRED uses AOA USB; WIRELESS connects to the phone's six TCP ports. */
@@ -165,6 +168,14 @@ class CarLifeEngine(
 
     fun sendHardKey(keycode: Int) {
         session?.sendHardKey(keycode)
+    }
+
+    fun sendGoToForeground() {
+        session?.sendGoToForeground()
+    }
+
+    fun sendLaunchMode(serviceType: Int) {
+        session?.sendLaunchMode(serviceType)
     }
 
     // ---- video pause ----
@@ -359,6 +370,9 @@ class CarLifeEngine(
 
     override fun onTtsInit(init: CarLifeMessages.AudioInit) {
         ttsTrack = rebuildTrack(ttsTrack, init, AudioManager.STREAM_MUSIC)
+        // Navigation voice has its own volume so prompts can duck under music.
+        val gain = (CarLifePersistence.get(context).ttsVolume() / 100f).coerceIn(0f, 1f)
+        ttsTrack?.let { t -> runCatching { t.setVolume(gain) } }
     }
 
     override fun onTtsData(pcm: ByteArray) {
@@ -385,6 +399,10 @@ class CarLifeEngine(
 
     override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
         uiListener.onMediaInfo(info)
+    }
+
+    override fun onMediaProgress(percent: Int) {
+        uiListener.onMediaProgress(percent)
     }
 
     override fun onNaviNextTurnInfo(info: CarLifeMessages.NaviNextTurnInfo) {

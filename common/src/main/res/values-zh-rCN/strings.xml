@@ -757,4 +757,9 @@
     <string name="settings_daynight_night">夜间</string>
     <string name="settings_session_log">会话日志</string>
     <string name="settings_log_none">尚未生成,连接一次后出现。</string>
+    <string name="carlife_quick_navi">导航</string>
+    <string name="carlife_quick_music">音乐</string>
+    <string name="carlife_quick_foreground">手机主页</string>
+    <string name="settings_sound">声音</string>
+    <string name="settings_tts_volume">导航语音音量</string>
 </resources>

@@ -101,6 +101,13 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         prefs.edit().putString(KEY_LAST_PHONE, v).apply()
     }
 
+    /** Navigation-voice volume (TTS track gain), 0..100. */
+    fun ttsVolume(): Int = prefs.getInt(KEY_TTS_VOLUME, 100)
+
+    fun saveTtsVolume(v: Int) {
+        prefs.edit().putInt(KEY_TTS_VOLUME, v.coerceIn(0, 100)).apply()
+    }
+
     companion object {
         private const val FILE = "carlife_settings"
 
@@ -120,6 +127,7 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         private const val KEY_DEMO_DATA = "demo_data"
         private const val KEY_ACCENT = "accent"
         private const val KEY_LAST_PHONE = "last_phone"
+        private const val KEY_TTS_VOLUME = "tts_volume"
 
         const val DAY_NIGHT_SYSTEM = 0
         const val DAY_NIGHT_DAY = 1

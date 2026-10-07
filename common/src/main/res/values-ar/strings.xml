@@ -707,4 +707,9 @@
     <string name="settings_daynight_night">ليل</string>
     <string name="settings_session_log">سجل الجلسة</string>
     <string name="settings_log_none">لا يوجد ملف بعد - يظهر بعد أول اتصال.</string>
+    <string name="carlife_quick_navi">الملاحة</string>
+    <string name="carlife_quick_music">الموسيقى</string>
+    <string name="carlife_quick_foreground">شاشة الهاتف</string>
+    <string name="settings_sound">الصوت</string>
+    <string name="settings_tts_volume">مستوى صوت الملاحة</string>
 </resources>

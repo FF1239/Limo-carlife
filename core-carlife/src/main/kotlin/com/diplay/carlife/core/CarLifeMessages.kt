@@ -362,16 +362,17 @@ object CarLifeMessages {
 
     /** MEDIA_INFO payload (mobile -> HU, for the HUD/cluster widgets). */
     data class MediaInfo(
-        val source: String,
-        val song: String,
-        val artist: String,
-        val album: String,
-        val duration: Int,
-        val mode: Int,
+        var source: String,
+        var song: String,
+        var artist: String,
+        var album: String,
+        var albumArt: ByteArray,
+        var duration: Int,
+        var mode: Int,
     ) {
         companion object {
             fun decode(bytes: ByteArray): MediaInfo {
-                var m = MediaInfo("", "", "", "", 0, 0)
+                var m = MediaInfo("", "", "", "", ByteArray(0), 0, 0)
                 val r = ProtoReader(bytes)
                 var f = r.nextField()
                 while (f != 0) {
@@ -380,8 +381,28 @@ object CarLifeMessages {
                         2 -> m.copy(song = r.readString())
                         3 -> m.copy(artist = r.readString())
                         4 -> m.copy(album = r.readString())
+                        5 -> m.copy(albumArt = r.readBytes())
                         6 -> m.copy(duration = r.readInt32())
                         9 -> m.copy(mode = r.readInt32())
+                        else -> m.also { r.skip() }
+                    }
+                    f = r.nextField()
+                }
+                return m
+            }
+        }
+    }
+
+    /** MEDIA_PROGRESS_BAR payload (mobile -> HU): playback percent 0..100. */
+    data class MediaProgressBar(val progressBar: Int) {
+        companion object {
+            fun decode(bytes: ByteArray): MediaProgressBar {
+                var m = MediaProgressBar(0)
+                val r = ProtoReader(bytes)
+                var f = r.nextField()
+                while (f != 0) {
+                    m = when (f) {
+                        1 -> m.copy(progressBar = r.readInt32())
                         else -> m.also { r.skip() }
                     }
                     f = r.nextField()

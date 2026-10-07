@@ -706,4 +706,9 @@
     <string name="settings_daynight_night">Noche</string>
     <string name="settings_session_log">Registro de sesión</string>
     <string name="settings_log_none">Aún no hay archivo; aparece tras la primera conexión.</string>
+    <string name="carlife_quick_navi">Navegación</string>
+    <string name="carlife_quick_music">Música</string>
+    <string name="carlife_quick_foreground">Inicio del teléfono</string>
+    <string name="settings_sound">Sonido</string>
+    <string name="settings_tts_volume">Volumen de la voz de navegación</string>
 </resources>

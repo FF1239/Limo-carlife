@@ -133,6 +133,14 @@ class CarLifeSettingsActivity : Activity() {
         })
         column.addView(behaviourPanel)
 
+        // sound section
+        column.addView(panelTitle(getString(R.string.settings_sound), dp(26), dp(10)))
+        val soundPanel = panel()
+        soundPanel.addView(volumeSlider(getString(R.string.settings_tts_volume), persistence.ttsVolume()) {
+            persistence.saveTtsVolume(it)
+        })
+        column.addView(soundPanel)
+
         // appearance section
         column.addView(panelTitle(getString(R.string.settings_appearance), dp(26), dp(10)))
         val accentPanel = panel()
@@ -241,6 +249,34 @@ class CarLifeSettingsActivity : Activity() {
         }
         holder.addView(caption)
         holder.addView(row)
+        return holder
+    }
+
+    /** Plain 0..100 slider (no ±50 offset) for absolute volumes. */
+    private fun volumeSlider(label: String, value: Int, onChange: (Int) -> Unit): View {
+        val caption = TextView(this).apply {
+            text = "$label  $value%"
+            setTextColor(TEXT_DIM)
+            textSize = 13f
+            setPadding(0, dp(8), 0, dp(2))
+        }
+        val bar = SeekBar(this).apply {
+            max = 100
+            progress = value
+        }
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                caption.text = "$label  $progress%"
+                onChange(progress)
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) = Unit
+            override fun onStopTrackingTouch(sb: SeekBar?) = Unit
+        })
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        holder.addView(caption)
+        holder.addView(bar, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return holder
     }
 

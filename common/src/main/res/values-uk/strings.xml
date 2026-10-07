@@ -718,4 +718,9 @@
     <string name="settings_daynight_night">Ніч</string>
     <string name="settings_session_log">Журнал сеансу</string>
     <string name="settings_log_none">Файлу ще немає — зʼявиться після першого підключення.</string>
+    <string name="carlife_quick_navi">Навігація</string>
+    <string name="carlife_quick_music">Музика</string>
+    <string name="carlife_quick_foreground">Екран телефона</string>
+    <string name="settings_sound">Звук</string>
+    <string name="settings_tts_volume">Гучність голосу навігації</string>
 </resources>

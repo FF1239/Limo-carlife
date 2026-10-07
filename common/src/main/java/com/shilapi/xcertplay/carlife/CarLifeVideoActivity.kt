@@ -42,7 +42,10 @@ class CarLifeVideoActivity : Activity() {
     private lateinit var textureView: TextureView
     private lateinit var gauge: GaugeView
     private lateinit var ticker: TelemetryBar
-    private lateinit var hudMedia: TextView
+    private lateinit var hudMedia: LinearLayout
+    private lateinit var hudCover: android.widget.ImageView
+    private lateinit var hudText: TextView
+    private lateinit var hudProgress: android.widget.ProgressBar
     private lateinit var hudNavi: TextView
     private lateinit var statusOverlay: TextView
     private lateinit var settingsPanel: CarLifeSettingsPanel
@@ -117,6 +120,7 @@ class CarLifeVideoActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CarbonTheme.load(this)
+        installCrashCapture()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // Projection screen stays on while the session runs.
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -214,18 +218,43 @@ class CarLifeVideoActivity : Activity() {
         )
         textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoTransform() }
 
-        hudMedia = TextView(this).apply {
-            setTextColor(CarbonTheme.TEXT)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            maxLines = 2
-            typeface = Typeface.MONOSPACE
+        hudMedia = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 cornerRadius = 0f
                 setColor(0xB30C0D0F.toInt())
                 setStroke(dp(1), CarbonTheme.HAIRLINE)
             }
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             visibility = View.GONE
+            val row = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            hudCover = android.widget.ImageView(this@CarLifeVideoActivity).apply {
+                visibility = View.GONE
+                background = GradientDrawable().apply { setColor(0x22FFFFFF.toInt()) }
+            }
+            row.addView(hudCover, LinearLayout.LayoutParams(dp(40), dp(40)))
+            hudText = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(CarbonTheme.TEXT)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                maxLines = 2
+                typeface = Typeface.MONOSPACE
+                setPadding(dp(10), 0, 0, 0)
+            }
+            row.addView(hudText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(row, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            hudProgress = android.widget.ProgressBar(
+                this@CarLifeVideoActivity, null, android.R.attr.progressBarStyleHorizontal,
+            ).apply {
+                max = 100
+                progress = 0
+                visibility = View.GONE
+            }
+            addView(hudProgress, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(6)).apply { topMargin = dp(8) })
         }
         stage.addView(
             hudMedia,
@@ -440,6 +469,24 @@ class CarLifeVideoActivity : Activity() {
             topMargin = dp(10)
         })
 
+        // phone-app shortcuts: ask the phone to open navi / music / foreground
+        val btnRow3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_navi)) {
+            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MAP)
+        })
+        btnRow3.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_music)) {
+            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MUSIC)
+        })
+        btnRow3.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_foreground)) {
+            engine?.sendGoToForeground()
+        })
+        instruments.addView(btnRow3, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(10)
+        })
+
         body.addView(instruments, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -512,6 +559,18 @@ class CarLifeVideoActivity : Activity() {
         matrix.setScale(scale, scale)
         matrix.postTranslate((vw - phoneWidth * scale) / 2f, (vh - phoneHeight * scale) / 2f)
         textureView.setTransform(matrix)
+    }
+
+    /** Writes any uncaught crash into the session log before the process dies. */
+    private fun installCrashCapture() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            CarLifeSessionLog.log(
+                this, "CRASH",
+                "${thread.name}: ${android.util.Log.getStackTraceString(throwable)}",
+            )
+            previous?.uncaughtException(thread, throwable)
+        }
     }
 
     /** Hysteresis so passing shadows/tunnels do not flicker the picture. */
@@ -645,9 +704,29 @@ class CarLifeVideoActivity : Activity() {
 
                 override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
                     main.post {
-                        if (info.song.isNotEmpty()) {
-                            hudMedia.visibility = View.VISIBLE
-                            hudMedia.text = "♪ ${info.artist} — ${info.song}".trim(' ', '—')
+                        val cover = info.albumArt.takeIf { it.isNotEmpty() }?.let { bytes ->
+                            runCatching {
+                                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            }.getOrNull()
+                        }
+                        val text = "♪ ${info.artist} — ${info.song}".trim(' ', '—')
+                        if (cover == null && text.length <= 2) {
+                            hudMedia.visibility = View.GONE
+                            return@post
+                        }
+                        hudCover.visibility = if (cover != null) View.VISIBLE else View.GONE
+                        cover?.let { hudCover.setImageBitmap(it) }
+                        hudText.text = text
+                        hudProgress.visibility = View.GONE
+                        hudMedia.visibility = View.VISIBLE
+                    }
+                }
+
+                override fun onMediaProgress(percent: Int) {
+                    main.post {
+                        if (percent in 1..100 && hudMedia.visibility == View.VISIBLE) {
+                            hudProgress.progress = percent
+                            hudProgress.visibility = View.VISIBLE
                         }
                     }
                 }

@@ -66,6 +66,9 @@ class CarLifeSession(
         /** CAR_VELOCITY (mobile -> HU): wheel-speed estimate. */
         fun onCarVelocity(speed: CarLifeMessages.CarSpeed) {}
 
+        /** MEDIA_PROGRESS_BAR (mobile -> HU): playback percent 0..100. */
+        fun onMediaProgress(percent: Int) {}
+
         fun onErrorCode(error: CarLifeMessages.ErrorCode)
 
         fun onBackground()
@@ -228,6 +231,15 @@ class CarLifeSession(
         sendCmd(CarLife.Cmd.CAR_DATA_SUBSCRIBE_START, CarLifeMessages.VehicleInfo(moduleId, flag, frequency).encode())
     }
 
+    /** Asks the phone to come to the foreground (home screen of CarLife). */
+    fun sendGoToForeground() = sendCmd(CarLife.Cmd.GO_TO_FOREGROUND, ByteArray(0))
+
+    /**
+     * Asks the phone to open a specific app view; [serviceType] is one of
+     * CarLife.Cmd.LAUNCH_MODE_* (MAP / MUSIC / PHONE).
+     */
+    fun sendLaunchMode(serviceType: Int) = sendCmd(serviceType, ByteArray(0))
+
     fun close(reason: String = "closed") {
         phase = Phase.CLOSED
         listener.onDisconnect(reason)
@@ -298,6 +310,8 @@ class CarLifeSession(
             }
             CarLife.Cmd.MODULE_STATUS -> listener.onModuleStatus(CarLifeMessages.ModuleStatusList.decode(payload))
             CarLife.Cmd.MEDIA_INFO -> listener.onMediaInfo(CarLifeMessages.MediaInfo.decode(payload))
+            CarLife.Cmd.MEDIA_PROGRESS_BAR ->
+                listener.onMediaProgress(CarLifeMessages.MediaProgressBar.decode(payload).progressBar)
             CarLife.Cmd.NAVI_NEXT_TURN_INFO ->
                 listener.onNaviNextTurnInfo(CarLifeMessages.NaviNextTurnInfo.decode(payload))
             CarLife.Cmd.ERROR_CODE -> listener.onErrorCode(CarLifeMessages.ErrorCode.decode(payload))
