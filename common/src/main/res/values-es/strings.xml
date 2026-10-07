@@ -725,4 +725,6 @@
     <string name="widget_navi_label">Asistente CarLife</string>
     <string name="widget_wait_phone">Esperando el teléfono…</string>
     <string name="widget_no_media">Reproduce música en el teléfono</string>
+    <string name="state_scan_hint">¿Sin respuesta? Abre CarLife en el teléfono y prueba un cable de datos, no uno de solo carga.</string>
+    <string name="state_reconnect_hint">Mira la pantalla del teléfono: puede haber una petición de proyección.</string>
 </resources>

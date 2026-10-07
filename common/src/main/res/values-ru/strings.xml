@@ -725,4 +725,6 @@
     <string name="widget_navi_label">Помощник CarLife</string>
     <string name="widget_wait_phone">Ожидание телефона…</string>
     <string name="widget_no_media">Включите музыку на телефоне</string>
+    <string name="state_scan_hint">Нет ответа? Откройте CarLife на телефоне и попробуйте кабель передачи данных, а не только зарядный.</string>
+    <string name="state_reconnect_hint">Проверьте экран телефона — возможен запрос проекции.</string>
 </resources>

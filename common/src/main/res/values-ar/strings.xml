@@ -726,4 +726,6 @@
     <string name="widget_navi_label">مساعد CarLife</string>
     <string name="widget_wait_phone">بانتظار الهاتف…</string>
     <string name="widget_no_media">شغّل الموسيقى على الهاتف</string>
+    <string name="state_scan_hint">لا استجابة؟ افتح CarLife على الهاتف وجرّب كبل بيانات وليس كبل شحن فقط.</string>
+    <string name="state_reconnect_hint">تحقق من شاشة الهاتف — قد يوجد طلب إسقاط.</string>
 </resources>

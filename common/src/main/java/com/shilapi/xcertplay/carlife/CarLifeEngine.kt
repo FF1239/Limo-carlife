@@ -253,8 +253,16 @@ class CarLifeEngine(
     @Volatile
     private var videoPacketsSinceArm = 0L
 
+    /**
+     * Packets flowing but zero decodes means a dead decoder on a live stream:
+     * permanent black video with audio. The watchdog counts both.
+     */
+    @Volatile
+    private var decodedSinceArm = 0L
+
     private fun armStreamWatchdog() {
         videoPacketsSinceArm = 0
+        decodedSinceArm = 0
         scheduleWatchdogCheck()
     }
 
@@ -262,11 +270,12 @@ class CarLifeEngine(
         watchdog.removeCallbacksAndMessages(null)
         watchdog.postDelayed({
             if (!running) return@postDelayed
-            if (videoPacketsSinceArm == 0L) {
+            if (videoPacketsSinceArm == 0L || decodedSinceArm == 0L) {
                 emitState("watchdog", "no video flowing")
                 session?.close("watchdog: no video flowing")
             } else {
                 videoPacketsSinceArm = 0
+                decodedSinceArm = 0
                 scheduleWatchdogCheck()
             }
         }, STREAM_WATCHDOG_MS)
@@ -512,6 +521,7 @@ class CarLifeEngine(
             var out = c.dequeueOutputBuffer(info, DEQUEUE_TIMEOUT_US)
             while (out >= 0) {
                 c.releaseOutputBuffer(out, true)
+                decodedSinceArm++
                 out = c.dequeueOutputBuffer(info, 0)
             }
         } catch (e: Exception) {
@@ -590,13 +600,25 @@ class CarLifeEngine(
         vrTrack = null
     }
 
+    /** Volume for the media/TTS tracks, honouring the TTS preference on restore. */
+    private fun setMediaVolume(volume: Float) {
+        musicTrack?.let { runCatching { it.setVolume(volume) } }
+        ttsTrack?.let {
+            val gain = if (volume >= 1f) (CarLifePersistence.get(context).ttsVolume() / 100f).coerceIn(0f, 1f) else volume
+            runCatching { it.setVolume(gain) }
+        }
+    }
+
     /** Take media focus so the car's own player ducks/pauses (head-unit correctness). */
     private fun requestAudioFocus() {
         val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-            // Calls/nav prompts duck the projected media; anything else restores.
-            val volume = if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) 0.18f else 1f
-            listOf(musicTrack, ttsTrack).forEach { t ->
-                t?.let { runCatching { it.setVolume(volume) } }
+            when (change) {
+                // Calls/nav prompts duck the projected media, then restore.
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> setMediaVolume(0.18f)
+                // Permanent loss (another full-screen app): mute until regained.
+                AudioManager.AUDIOFOCUS_LOSS -> setMediaVolume(0.05f)
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> setMediaVolume(0.05f)
+                AudioManager.AUDIOFOCUS_GAIN -> setMediaVolume(1f)
             }
         }
         val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)

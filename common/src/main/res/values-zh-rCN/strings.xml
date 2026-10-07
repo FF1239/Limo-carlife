@@ -776,4 +776,6 @@
     <string name="widget_navi_label">CarLife 助手</string>
     <string name="widget_wait_phone">等待手机接入…</string>
     <string name="widget_no_media">在手机上播放音乐</string>
+    <string name="state_scan_hint">没反应?请确认手机已打开 CarLife,并换一根数据线(而非充电线)。</string>
+    <string name="state_reconnect_hint">请查看手机屏幕上是否有投影确认提示。</string>
 </resources>

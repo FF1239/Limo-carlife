@@ -80,5 +80,7 @@
     <!-- 小工具 -->
     <string name="widget_navi_label">CarLife 助手</string>
     <string name="widget_wait_phone">等待手機接入…</string>
-    <string name="widget_no_media">在手机上播放音樂</string>
+    <string name="widget_no_media">在手機上播放音樂</string>
+    <string name="state_scan_hint">沒反應?請確認手機已開啟 CarLife,並換一條資料線(而非充電線)。</string>
+    <string name="state_reconnect_hint">請查看手機螢幕上是否有投影確認提示。</string>
 </resources>

@@ -776,4 +776,6 @@
     <string name="widget_navi_label">CarLife companion</string>
     <string name="widget_wait_phone">Waiting for the phone…</string>
     <string name="widget_no_media">Play music on the phone</string>
+    <string name="state_scan_hint">No response? Open CarLife on the phone and try a data cable, not a charge-only one.</string>
+    <string name="state_reconnect_hint">Check the phone screen for a projection prompt.</string>
 </resources>

@@ -86,6 +86,9 @@ class CarLifeVideoActivity : Activity() {
     private var lastMediaKey = ""
 
     private val hideStatus = Runnable { statusOverlay.visibility = View.GONE }
+    private val videoRect = android.graphics.RectF()
+    private var reconnectCount = 0
+    private var scanHintShown = false
 
     /**
      * Demo vehicle source while no real feed exists; suppressed while the
@@ -672,8 +675,12 @@ class CarLifeVideoActivity : Activity() {
         val scale = minOf(vw.toFloat() / phoneWidth, vh.toFloat() / phoneHeight)
         val matrix = Matrix()
         matrix.setScale(scale, scale)
-        matrix.postTranslate((vw - phoneWidth * scale) / 2f, (vh - phoneHeight * scale) / 2f)
+        val left = (vw - phoneWidth * scale) / 2f
+        val top = (vh - phoneHeight * scale) / 2f
+        matrix.postTranslate(left, top)
         textureView.setTransform(matrix)
+        // Taps in the letterbox bars must NOT reach the phone as edge touches.
+        videoRect.set(left, top, left + phoneWidth * scale, top + phoneHeight * scale)
     }
 
     /**
@@ -835,6 +842,19 @@ class CarLifeVideoActivity : Activity() {
                         val key = "${info.song}|${info.artist}|${info.albumArt.size}"
                         if (key == lastMediaKey) return@post
                         lastMediaKey = key
+                        // Playback stopped on the phone: reset to the empty
+                        // hint instead of a stale track (missing stays absent).
+                        if (info.song.isBlank() && info.artist.isBlank()) {
+                            mediaTitle.text = ""
+                            mediaArtist.text = getString(R.string.widget_no_media)
+                            mediaProgress.progress = 0
+                            expTitle.text = ""
+                            expArtist.text = getString(R.string.widget_no_media)
+                            expProgress.progress = 0
+                            mediaCover.setImageDrawable(null)
+                            expCover.setImageDrawable(null)
+                            return@post
+                        }
                         val cover = info.albumArt.takeIf { it.isNotEmpty() }?.let { bytes ->
                             runCatching {
                                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -896,6 +916,8 @@ class CarLifeVideoActivity : Activity() {
         Log.i(TAG, "state=$state detail=$detail")
         when {
             state.startsWith("phase:streaming") || state == "connected" -> {
+                reconnectCount = 0
+                scanHintShown = false
                 main.removeCallbacks(demoTick)
                 if (CarLifePersistence.get(this).demoData()) {
                     main.post(demoTick)
@@ -911,11 +933,36 @@ class CarLifeVideoActivity : Activity() {
                 showStatus(getString(R.string.carlife_disconnected, detail ?: ""))
             }
 
-            state == "scanning" -> showStatus(getString(R.string.state_scanning))
+            state == "scanning" -> {
+                showStatus(getString(R.string.state_scanning))
+                // Charge-only cable or dead port: scanning stays silent forever
+                // without a hint (DiPlay's install-guidance lesson).
+                if (!scanHintShown) {
+                    scanHintShown = true
+                    main.postDelayed({
+                        if (engine != null && statusOverlay.visibility == View.VISIBLE) {
+                            statusOverlay.text = getString(R.string.state_scanning) +
+                                "\n" + getString(R.string.state_scan_hint)
+                        }
+                    }, 20_000)
+                }
+            }
+
             state == "wireless" || state == "wireless-connecting" ->
                 showStatus(getString(R.string.state_wireless_connecting, detail ?: ""))
-            state == "reconnecting" ->
-                showStatus(getString(R.string.state_reconnecting, detail ?: ""))
+
+            state == "reconnecting" -> {
+                reconnectCount++
+                val base = getString(R.string.state_reconnecting, detail ?: "")
+                showStatus(
+                    if (reconnectCount >= 3) {
+                        base + "\n" + getString(R.string.state_reconnect_hint)
+                    } else {
+                        base
+                    },
+                )
+            }
+
             state == "watchdog" -> showStatus(getString(R.string.state_watchdog))
             else -> showStatus(state + (detail?.let { " — $it" } ?: ""))
         }
@@ -949,6 +996,9 @@ class CarLifeVideoActivity : Activity() {
         val sample = if (event.actionMasked == MotionEvent.ACTION_MOVE) 0 else event.actionIndex
         val px = event.getX(sample)
         val py = event.getY(sample)
+        // Letterbox bars: consume but do not forward - edge-touching the phone
+        // from a black bar causes stray taps in its corner.
+        if (!videoRect.contains(px, py)) return true
         val x = (px / textureView.width.coerceAtLeast(1) * phoneWidth).toInt().coerceIn(0, phoneWidth - 1)
         val y = (py / textureView.height.coerceAtLeast(1) * phoneHeight).toInt().coerceIn(0, phoneHeight - 1)
         e.sendTouch(action, x, y)
@@ -957,6 +1007,16 @@ class CarLifeVideoActivity : Activity() {
 
     @Suppress("OVERRIDE_DEPRECATION")
     override fun onBackPressed() {
+        // Panels first: a stray Back must not leak into the phone while an
+        // overlay is open on the head unit.
+        if (settingsPanel.visibility == View.VISIBLE) {
+            setVisibleAnimated(settingsPanel, false)
+            return
+        }
+        if (mediaExpanded.visibility == View.VISIBLE) {
+            setVisibleAnimated(mediaExpanded, false)
+            return
+        }
         engine?.sendHardKey(CarLife.HardKey.BACK)
     }
 
