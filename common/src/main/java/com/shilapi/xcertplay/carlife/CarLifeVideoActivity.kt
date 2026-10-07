@@ -18,6 +18,7 @@ import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -32,34 +33,56 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
- * Connected screen per the approved C1 Pro design: projection dominant
- * (left 2/3, full height), right instrument column (live speed ring, vehicle
- * data panel, controls), bottom telemetry ticker, carbon HUD styling.
+ * The complete projection screen: the phone canvas fills the whole unit;
+ * driving info floats in glass capsules (turn top-left, speed top-right,
+ * control column on the right edge) and a thin media bar docks at the bottom.
+ * Mode switch asks the phone to open its music app or navigation via
+ * LAUNCH_MODE, so the projection itself becomes that app.
  */
 class CarLifeVideoActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var engine: CarLifeEngine? = null
     private lateinit var textureView: TextureView
-    private lateinit var gauge: GaugeView
-    private lateinit var ticker: TelemetryBar
-    private lateinit var hudMedia: LinearLayout
-    private lateinit var hudCover: android.widget.ImageView
-    private lateinit var hudText: TextView
-    private lateinit var hudProgress: android.widget.ProgressBar
-    private lateinit var hudNavi: TextView
     private lateinit var statusOverlay: TextView
     private lateinit var settingsPanel: CarLifeSettingsPanel
-    private var dataGear: TextView? = null
-    private var dataRpm: TextView? = null
     private val picture = CarLifePicture.Settings()
     private var phoneWidth = CarLife.DEFAULT_VIDEO_WIDTH
     private var phoneHeight = CarLife.DEFAULT_VIDEO_HEIGHT
 
+    // turn capsule
+    private lateinit var turnCapsule: View
+    private lateinit var turnTitle: TextView
+    private lateinit var turnSub: TextView
+
+    // speed capsule
+    private lateinit var speedText: TextView
+    private lateinit var gearBadge: TextView
+    private lateinit var speedSource: TextView
+
+    // control column
+    private lateinit var btnModeLabel: TextView
+    private lateinit var btnPauseLabel: TextView
+    private var videoPaused = false
+    private var modeIsMusic = false
+
+    // media bar + expanded panel
+    private lateinit var mediaCover: ImageView
+    private lateinit var mediaTitle: TextView
+    private lateinit var mediaArtist: TextView
+    private lateinit var mediaProgress: android.widget.ProgressBar
+    private lateinit var mediaPlayLabel: TextView
+    private lateinit var mediaExpanded: View
+    private lateinit var expCover: ImageView
+    private lateinit var expTitle: TextView
+    private lateinit var expArtist: TextView
+    private lateinit var expProgress: android.widget.ProgressBar
+    private lateinit var expPlayLabel: TextView
+    private var mediaPlaying = false
+
     private val hideStatus = Runnable { statusOverlay.visibility = View.GONE }
 
     /**
-     * Demo vehicle source until a real CAN feed exists: a gently wandering
-     * speed that drives the ring, gear and rpm readouts. Suppressed while the
+     * Demo vehicle source while no real feed exists; suppressed while the
      * phone's GPS feed is fresh (see [onCarGps]).
      */
     private var demoSpeed = 0
@@ -74,6 +97,7 @@ class CarLifeVideoActivity : Activity() {
     /** Auto day/night via the head unit's light sensor (SYSTEM mode only). */
     private var ambientLight: AndroidAmbientLight? = null
     private var ambientNight = false
+
     private val demoTick = object : Runnable {
         override fun run() {
             val gpsFresh = System.currentTimeMillis() - maxOf(lastGpsAt, unitGpsAt) < GPS_FRESH_MS
@@ -82,39 +106,9 @@ class CarLifeVideoActivity : Activity() {
                 return
             }
             demoSpeed = (demoSpeed + Random.nextInt(-9, 12)).coerceIn(0, 132)
-            val gear = gearForSpeed(demoSpeed)
-            val rpm = if (demoSpeed == 0) 800 else 900 + (demoSpeed * 23) % 4200
-            gauge.setGauge(demoSpeed, gear, rpm, isStandby = false)
-            dataGear?.text = gear
-            dataRpm?.text = rpm.toString()
-            ticker.update("SPEED", "$demoSpeed km/h", red = demoSpeed > 100)
-            ticker.update("GEAR", gear)
+            renderSpeed(demoSpeed, "DEMO")
             main.postDelayed(this, 900)
         }
-    }
-
-    private fun gearForSpeed(kmh: Int): String = if (kmh == 0) "P" else "D"
-
-    /**
-     * Picks the freshest real speed: the unit's own GNSS wins ties (roof
-     * antenna), the phone's CAR_GPS feed backs it up, demo data fills gaps.
-     */
-    private fun updateVehicleDisplay() {
-        val now = System.currentTimeMillis()
-        val unitFresh = now - unitGpsAt < GPS_FRESH_MS && unitKmh >= 0
-        val phoneFresh = now - lastGpsAt < GPS_FRESH_MS && phoneKmh >= 0
-        val kmh = when {
-            unitFresh && phoneFresh -> if (unitGpsAt >= lastGpsAt) unitKmh else phoneKmh
-            unitFresh -> unitKmh
-            phoneFresh -> phoneKmh
-            else -> return
-        }
-        val gear = gearForSpeed(kmh)
-        gauge.setGauge(kmh, gear, -1, isStandby = false)
-        dataGear?.text = gear
-        dataRpm?.text = "GPS"
-        ticker.update("SPEED", "$kmh km/h", red = kmh > 100)
-        ticker.update("GEAR", gear)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,7 +140,7 @@ class CarLifeVideoActivity : Activity() {
             val source = UnitGpsSpeedSource(this) { kmh ->
                 unitKmh = kmh
                 unitGpsAt = System.currentTimeMillis()
-                updateVehicleDisplay()
+                main.post { renderSpeed(unitKmh, "GPS") }
             }
             if (source.start()) unitGps = source
         }
@@ -170,15 +164,9 @@ class CarLifeVideoActivity : Activity() {
     }
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(CarbonTheme.BG)
-        }
-        val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
-        // ---- left: projection stage ----
-        val stage = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-
+        // ---- full-screen projection ----
         textureView = TextureView(this).apply {
             surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                 override fun onSurfaceTextureAvailable(
@@ -207,113 +195,361 @@ class CarLifeVideoActivity : Activity() {
                     main.postDelayed(hideStatus, 1200)
                 }
             }
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoTransform() }
         }
-        stage.addView(
-            textureView,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER,
-            ),
-        )
-        textureView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoTransform() }
+        root.addView(textureView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
-        hudMedia = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = 0f
-                setColor(0xB30C0D0F.toInt())
-                setStroke(dp(1), CarbonTheme.HAIRLINE)
-            }
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            visibility = View.GONE
-            val row = LinearLayout(this@CarLifeVideoActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            hudCover = android.widget.ImageView(this@CarLifeVideoActivity).apply {
-                visibility = View.GONE
-                background = GradientDrawable().apply { setColor(0x22FFFFFF.toInt()) }
-            }
-            row.addView(hudCover, LinearLayout.LayoutParams(dp(40), dp(40)))
-            hudText = TextView(this@CarLifeVideoActivity).apply {
-                setTextColor(CarbonTheme.TEXT)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                maxLines = 2
-                typeface = Typeface.MONOSPACE
-                setPadding(dp(10), 0, 0, 0)
-            }
-            row.addView(hudText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(row, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            hudProgress = android.widget.ProgressBar(
-                this@CarLifeVideoActivity, null, android.R.attr.progressBarStyleHorizontal,
-            ).apply {
-                max = 100
-                progress = 0
-                visibility = View.GONE
-            }
-            addView(hudProgress, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(6)).apply { topMargin = dp(8) })
-        }
-        stage.addView(
-            hudMedia,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP or Gravity.START,
-            ).apply {
-                val m = dp(16)
-                setMargins(m, m, m, m)
-            },
-        )
-
-        hudNavi = TextView(this).apply {
-            setTextColor(CarbonTheme.TEXT)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            maxLines = 2
-            typeface = Typeface.MONOSPACE
-            background = GradientDrawable().apply {
-                cornerRadius = 0f
-                setColor(0xB30C0D0F.toInt())
-                setStroke(dp(1), CarbonTheme.RED)
-            }
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            visibility = View.GONE
-        }
-        stage.addView(
-            hudNavi,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP or Gravity.END,
-            ).apply {
-                val m = dp(16)
-                setMargins(m, m, m, m)
-            },
-        )
-
+        // ---- status overlay ----
         statusOverlay = TextView(this).apply {
             setTextColor(CarbonTheme.TEXT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             letterSpacing = 0.06f
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                cornerRadius = 0f
-                setColor(0xB30C0D0F.toInt())
-                setStroke(dp(1), CarbonTheme.HAIRLINE)
-            }
+            background = glass(20f)
             setPadding(dp(26), dp(14), dp(26), dp(14))
         }
-        stage.addView(
-            statusOverlay,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER,
-            ),
-        )
+        root.addView(statusOverlay, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
+        // ---- turn capsule (top-left) ----
+        turnCapsule = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = glass(30f)
+            setPadding(dp(8), dp(8), dp(24), dp(8))
+            addView(TextView(this@CarLifeVideoActivity).apply {
+                text = "↰"
+                setTextColor(CarbonTheme.RED)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(24f)
+                    setColor(0x1AE1062C)
+                    setStroke(dp(1), 0x33E1062C)
+                }
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            val col = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), 0, 0, 0)
+            }
+            turnTitle = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+                typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
+            }
+            turnSub = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(0x99FFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                typeface = Typeface.MONOSPACE
+                maxLines = 1
+                setPadding(0, dp(3), 0, 0)
+            }
+            col.addView(turnTitle)
+            col.addView(turnSub)
+            addView(col)
+            visibility = View.GONE
+        }
+        root.addView(turnCapsule, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.START,
+        ).apply {
+            val m = dp(16)
+            setMargins(m, m, m, m)
+        })
+
+        // ---- speed capsule (top-right) ----
+        val speed = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = glass(30f)
+            setPadding(dp(20), dp(8), dp(18), dp(8))
+            speedText = TextView(this@CarLifeVideoActivity).apply {
+                text = "0"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 44f)
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            addView(speedText)
+            val col = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), 0, 0, 0)
+            }
+            col.addView(TextView(this@CarLifeVideoActivity).apply {
+                text = "km/h"
+                setTextColor(0x8CFFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                typeface = Typeface.MONOSPACE
+            })
+            gearBadge = TextView(this@CarLifeVideoActivity).apply {
+                text = "P"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(6f)
+                    setColor(CarbonTheme.RED)
+                }
+                setPadding(dp(10), dp(1), dp(10), dp(2))
+            }
+            col.addView(gearBadge)
+            speedSource = TextView(this@CarLifeVideoActivity).apply {
+                text = ""
+                setTextColor(0x66FFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                typeface = Typeface.MONOSPACE
+                setPadding(0, dp(4), 0, 0)
+            }
+            col.addView(speedSource)
+            addView(col)
+        }
+        root.addView(speed, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.END,
+        ).apply {
+            val m = dp(16)
+            setMargins(m, m, m, m)
+        })
+
+        // ---- control column (right edge) ----
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        btnModeLabel = TextView(this).apply {
+            text = "♪"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }
+        column.addView(roundButton(btnModeLabel) { toggleAppMode() })
+        column.addView(space())
+        btnPauseLabel = TextView(this).apply {
+            text = "❚❚"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }
+        column.addView(roundButton(btnPauseLabel) {
+            videoPaused = !videoPaused
+            engine?.setVideoPaused(videoPaused)
+            btnPauseLabel.text = if (videoPaused) "►" else "❚❚"
+        })
+        column.addView(space())
+        column.addView(roundButton(TextView(this).apply {
+            text = "◎"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }) { takeScreenshot() })
+        column.addView(space())
+        column.addView(roundButton(TextView(this).apply {
+            text = "✕"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }) {
+            engine?.stop()
+            finish()
+        })
+        column.addView(space())
+        column.addView(roundButton(TextView(this).apply {
+            text = "≡"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }) {
+            settingsPanel.visibility =
+                if (settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        })
+        root.addView(column, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.END or Gravity.CENTER_VERTICAL,
+        ).apply {
+            val m = dp(16)
+            setMargins(0, m, m, m)
+        })
+
+        // ---- thin media bar (bottom) ----
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply { setColor(0xF20C0D0F.toInt()) }
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            mediaCover = ImageView(this@CarLifeVideoActivity).apply {
+                background = GradientDrawable().apply { setColor(0x22FFFFFF.toInt()) }
+                clipToOutline = true
+                outlineProvider = object : android.view.ViewOutlineProvider() {
+                    override fun getOutline(view: View, outline: android.graphics.Outline) {
+                        outline.setRoundRect(0, 0, view.width, view.height, dp(8f))
+                    }
+                }
+            }
+            addView(mediaCover, LinearLayout.LayoutParams(dp(44), dp(44)))
+            val textCol = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, 0, 0)
+            }
+            mediaTitle = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
+            }
+            mediaArtist = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(0x8CFFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                maxLines = 1
+                setPadding(0, dp(2), 0, 0)
+            }
+            mediaProgress = android.widget.ProgressBar(
+                this@CarLifeVideoActivity, null, android.R.attr.progressBarStyleHorizontal,
+            ).apply {
+                max = 100
+                progress = 0
+                progressTintList = android.content.res.ColorStateList.valueOf(CarbonTheme.RED)
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0x24FFFFFF)
+            }
+            textCol.addView(mediaTitle)
+            textCol.addView(mediaArtist)
+            textCol.addView(mediaProgress, LinearLayout.LayoutParams(dp(220), dp(5)).apply {
+                topMargin = dp(5)
+            })
+            addView(textCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "❮"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                gravity = Gravity.CENTER
+            }) { engine?.sendHardKey(CarLife.HardKey.SELECTOR_PREVIOUS) })
+            addView(space(8))
+            mediaPlayLabel = TextView(this@CarLifeVideoActivity).apply {
+                text = "►"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(22f)
+                    setColor(CarbonTheme.RED)
+                }
+            }
+            addView(FrameLayout(this@CarLifeVideoActivity).apply {
+                addView(mediaPlayLabel, FrameLayout.LayoutParams(dp(44), dp(44)))
+                isClickable = true
+                setOnClickListener { toggleMediaPlay() }
+            })
+            addView(space(8))
+            addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "❯"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                gravity = Gravity.CENTER
+            }) { engine?.sendHardKey(CarLife.HardKey.SELECTOR_NEXT) })
+            addView(space(10))
+            addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "⌃"
+                setTextColor(0xB3FFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                gravity = Gravity.CENTER
+            }) { toggleMediaPanel() })
+        }
+        root.addView(bar, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(64), Gravity.BOTTOM))
+
+        // ---- expanded media panel (hidden by default) ----
+        mediaExpanded = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                setColor(0xF60C0D0F.toInt())
+                setStroke(dp(1), CarbonTheme.HAIRLINE)
+            }
+            setPadding(dp(24), dp(18), dp(24), dp(18))
+            expCover = ImageView(this@CarLifeVideoActivity).apply {
+                background = GradientDrawable().apply { setColor(0x22FFFFFF.toInt()) }
+            }
+            addView(expCover, LinearLayout.LayoutParams(dp(96), dp(96)))
+            val col = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), 0, 0, 0)
+            }
+            expTitle = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+                typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
+            }
+            expArtist = TextView(this@CarLifeVideoActivity).apply {
+                setTextColor(0x8CFFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                maxLines = 1
+                setPadding(0, dp(4), 0, 0)
+            }
+            expProgress = android.widget.ProgressBar(
+                this@CarLifeVideoActivity, null, android.R.attr.progressBarStyleHorizontal,
+            ).apply {
+                max = 100
+                progress = 0
+                progressTintList = android.content.res.ColorStateList.valueOf(CarbonTheme.RED)
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0x24FFFFFF)
+            }
+            col.addView(expTitle)
+            col.addView(expArtist)
+            col.addView(expProgress, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(7)).apply { topMargin = dp(12) })
+            addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val ctl = LinearLayout(this@CarLifeVideoActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            ctl.addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "❮"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                gravity = Gravity.CENTER
+            }) { engine?.sendHardKey(CarLife.HardKey.SELECTOR_PREVIOUS) })
+            ctl.addView(space(12))
+            expPlayLabel = TextView(this@CarLifeVideoActivity).apply {
+                text = "►"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(28f)
+                    setColor(CarbonTheme.RED)
+                }
+            }
+            ctl.addView(FrameLayout(this@CarLifeVideoActivity).apply {
+                addView(expPlayLabel, FrameLayout.LayoutParams(dp(56), dp(56)))
+                isClickable = true
+                setOnClickListener { toggleMediaPlay() }
+            })
+            ctl.addView(space(12))
+            ctl.addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "❯"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                gravity = Gravity.CENTER
+            }) { engine?.sendHardKey(CarLife.HardKey.SELECTOR_NEXT) })
+            ctl.addView(space(12))
+            ctl.addView(roundButton(TextView(this@CarLifeVideoActivity).apply {
+                text = "⌄"
+                setTextColor(0xB3FFFFFF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                gravity = Gravity.CENTER
+            }) { toggleMediaPanel() })
+            addView(ctl)
+            visibility = View.GONE
+        }
+        root.addView(mediaExpanded, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM,
+        ))
+
+        // ---- settings panel ----
         settingsPanel = CarLifeSettingsPanel(
             this,
             CarLifePersistence.get(this),
@@ -335,221 +571,63 @@ class CarLifeVideoActivity : Activity() {
                 startEngine(currentSurface())
             },
         ).apply { visibility = View.GONE }
-        stage.addView(
-            settingsPanel,
-            FrameLayout.LayoutParams(
-                (resources.displayMetrics.widthPixels * 0.62f).toInt().coerceAtLeast(dp(360)),
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER,
-            ),
-        )
-
-        body.addView(stage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 2f))
-
-        // ---- right: instrument column ----
-        val instruments = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(CarbonTheme.PANEL_DEEP)
-            setPadding(dp(18), dp(16), dp(18), dp(16))
-        }
-
-        val brandRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        brandRow.addView(View(this).apply { setBackgroundColor(CarbonTheme.RED) },
-            LinearLayout.LayoutParams(dp(4), dp(14)))
-        brandRow.addView(TextView(this).apply {
-            text = "INSTRUMENTS"
-            setTextColor(CarbonTheme.TEXT)
-            textSize = 12f
-            letterSpacing = 0.22f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(10), 0, 0, 0)
-        })
-        brandRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        instruments.addView(brandRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        instruments.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-
-        gauge = GaugeView(this).apply { setGauge(0, "P", 0, isStandby = true) }
-        instruments.addView(gauge, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(220)).apply { topMargin = dp(10) })
-
-        // vehicle data panel
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = CarbonTheme.hairlinePanel(this@CarLifeVideoActivity)
-        }
-        val gearRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-        }
-        val gearBig = TextView(this).apply {
-            text = "P"
-            setTextColor(CarbonTheme.RED)
-            textSize = 30f
-            typeface = Typeface.MONOSPACE
-        }
-        dataGear = gearBig
-        gearRow.addView(gearBig)
-        gearRow.addView(TextView(this).apply {
-            text = "GEAR · 挡位"
-            setTextColor(CarbonTheme.TEXT_FAINT)
-            textSize = 10f
-            letterSpacing = 0.18f
-            setPadding(dp(14), 0, 0, 0)
-        })
-        gearRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        dataRpm = TextView(this).apply {
-            text = "800"
-            setTextColor(CarbonTheme.TEXT)
-            textSize = 17f
-            typeface = Typeface.MONOSPACE
-        }
-        gearRow.addView(dataRpm)
-        panel.addView(gearRow)
-        panel.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-        val statsRow = LinearLayout(this)
-        listOf("续航" to "--", "油量" to "--", "水温" to "--").forEachIndexed { i, (k, v) ->
-            if (i > 0) {
-                statsRow.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
-                    LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT))
-            }
-            statsRow.addView(statCell(k, v))
-        }
-        panel.addView(statsRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        instruments.addView(panel, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(14)
-        })
-
-        // controls
-        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        btnRow.addView(actionBtn(getString(R.string.carlife_settings_button)) {
-            settingsPanel.visibility =
-                if (settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        })
-        btnRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow.addView(actionBtn(getString(R.string.carlife_wireless_connect)) {
-            startWirelessScan()
-        })
-        btnRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow.addView(actionBtn(getString(R.string.carlife_manual_ip_button)) {
-            promptForIp()
-        })
-        instruments.addView(btnRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(14)
-        })
-
-        var videoPaused = false
-        var pauseLabel: TextView? = null
-        val btnRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val pauseBtn = actionBtn(getString(R.string.carlife_pause)) {
-            videoPaused = !videoPaused
-            engine?.setVideoPaused(videoPaused)
-            pauseLabel?.text = getString(if (videoPaused) R.string.carlife_resume else R.string.carlife_pause)
-        }
-        pauseLabel = (pauseBtn as ViewGroup).getChildAt(0) as TextView
-        btnRow2.addView(pauseBtn)
-        btnRow2.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow2.addView(actionBtn(getString(R.string.carlife_screenshot)) { takeScreenshot() })
-        btnRow2.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow2.addView(actionBtn(getString(R.string.carlife_disconnect)) {
-            engine?.stop()
-            finish()
-        })
-        instruments.addView(btnRow2, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(10)
-        })
-
-        // phone-app shortcuts: ask the phone to open navi / music / foreground
-        val btnRow3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_navi)) {
-            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MAP)
-        })
-        btnRow3.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_music)) {
-            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MUSIC)
-        })
-        btnRow3.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
-        btnRow3.addView(actionBtn(getString(R.string.carlife_quick_foreground)) {
-            engine?.sendGoToForeground()
-        })
-        instruments.addView(btnRow3, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(10)
-        })
-
-        body.addView(instruments, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-        root.addView(body, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        // ---- telemetry ticker ----
-        ticker = TelemetryBar(this)
-        root.addView(ticker, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-        ticker.update("LINK", "OFFLINE", red = true)
-        ticker.update("SPEED", "0 km/h")
-        ticker.update("GEAR", "P")
-        ticker.update("CANVAS", "$phoneWidth×$phoneHeight")
+        root.addView(settingsPanel, FrameLayout.LayoutParams(
+            (resources.displayMetrics.widthPixels * 0.62f).toInt().coerceAtLeast(dp(360)),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER,
+        ))
 
         setContentView(root)
     }
 
-    private fun statCell(key: String, value: String): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(0, dp(10), 0, dp(10))
-        addView(TextView(this@CarLifeVideoActivity).apply {
-            text = key
-            setTextColor(CarbonTheme.TEXT_FAINT)
-            textSize = 9f
-            letterSpacing = 0.18f
-        })
-        addView(TextView(this@CarLifeVideoActivity).apply {
-            text = value
-            setTextColor(CarbonTheme.TEXT)
-            textSize = 16f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, dp(3), 0, 0)
-        })
+    // ---- ui helpers ----
+
+    private fun glass(radiusDp: Float): GradientDrawable = GradientDrawable().apply {
+        cornerRadius = dp(radiusDp)
+        setColor(0x8C101216.toInt())
+        setStroke(dp(1), 0x2EFFFFFF)
     }
 
-    private fun actionBtn(text: String, onClick: () -> Unit): View = FrameLayout(this).apply {
-        background = GradientDrawable().apply {
-            cornerRadius = 0f
-            setStroke(dp(1), CarbonTheme.HAIRLINE)
-            setColor(Color.parseColor("#1D2024"))
+    private fun roundButton(label: TextView, onClick: () -> Unit): View =
+        FrameLayout(this).apply {
+            background = glass(26f)
+            addView(label, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
         }
-        addView(TextView(this@CarLifeVideoActivity).apply {
-            this.text = text
-            setTextColor(CarbonTheme.TEXT)
-            textSize = 13f
-            letterSpacing = 0.14f
-            gravity = Gravity.CENTER
-        }, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        minimumHeight = dp(46)
-        isClickable = true
-        setOnClickListener { onClick() }
+
+    private fun space(w: Int = 10): View = View(this).also {
+        it.layoutParams = LinearLayout.LayoutParams(dp(w), 1)
     }
 
-    /**
-     * The stripped platform jar here has no TextureView.setPaint, so the
-     * ColorMatrix goes through a hardware layer paint instead (and drops the
-     * layer entirely at neutral settings).
-     */
-    /**
-     * Letterboxes the projection inside the stage: the phone canvas keeps its
-     * aspect (black bars top/bottom or left/right) instead of stretching.
-     */
+    private fun toggleAppMode() {
+        modeIsMusic = !modeIsMusic
+        if (modeIsMusic) {
+            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MUSIC)
+            btnModeLabel.text = "➤"
+            turnCapsule.visibility = View.GONE
+        } else {
+            engine?.sendLaunchMode(CarLife.Cmd.LAUNCH_MODE_MAP)
+            btnModeLabel.text = "♪"
+        }
+    }
+
+    private fun toggleMediaPlay() {
+        mediaPlaying = !mediaPlaying
+        engine?.sendHardKey(if (mediaPlaying) CarLife.HardKey.MEDIA_START else CarLife.HardKey.MEDIA_STOP)
+        val glyph = if (mediaPlaying) "❚❚" else "►"
+        mediaPlayLabel.text = glyph
+        expPlayLabel.text = glyph
+    }
+
+    private fun toggleMediaPanel() {
+        mediaExpanded.visibility =
+            if (mediaExpanded.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    /** Letterboxes the projection inside the full screen (no stretching). */
     private fun applyVideoTransform() {
         val vw = textureView.width
         val vh = textureView.height
@@ -559,6 +637,21 @@ class CarLifeVideoActivity : Activity() {
         matrix.setScale(scale, scale)
         matrix.postTranslate((vw - phoneWidth * scale) / 2f, (vh - phoneHeight * scale) / 2f)
         textureView.setTransform(matrix)
+    }
+
+    /**
+     * The stripped platform jar here has no TextureView.setPaint, so the
+     * ColorMatrix goes through a hardware layer paint instead (and drops the
+     * layer entirely at neutral settings).
+     */
+    private fun applyPicture() {
+        val neutral = picture.brightness == 0 && picture.contrast == 0 &&
+            picture.saturation == 0 && picture.warmth == 0 && !picture.night
+        if (neutral) {
+            textureView.setLayerType(View.LAYER_TYPE_NONE, null)
+        } else {
+            textureView.setLayerType(View.LAYER_TYPE_HARDWARE, CarLifePicture.paint(picture))
+        }
     }
 
     /** Writes any uncaught crash into the session log before the process dies. */
@@ -589,6 +682,13 @@ class CarLifeVideoActivity : Activity() {
         }
     }
 
+    /** Renders one speed reading into the capsule with its source badge. */
+    private fun renderSpeed(kmh: Int, source: String) {
+        speedText.text = kmh.toString()
+        gearBadge.text = if (kmh == 0) "P" else "D"
+        speedSource.text = if (source.isBlank()) "" else "$source ●"
+    }
+
     /** Saves the current projection frame into this app's external pictures dir. */
     private fun takeScreenshot() {
         val bitmap = textureView.bitmap
@@ -606,16 +706,6 @@ class CarLifeVideoActivity : Activity() {
         } catch (e: Exception) {
             Log.w(TAG, "screenshot failed", e)
             Toast.makeText(this, getString(R.string.screenshot_failed), Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun applyPicture() {
-        val neutral = picture.brightness == 0 && picture.contrast == 0 &&
-            picture.saturation == 0 && picture.warmth == 0 && !picture.night
-        if (neutral) {
-            textureView.setLayerType(View.LAYER_TYPE_NONE, null)
-        } else {
-            textureView.setLayerType(View.LAYER_TYPE_HARDWARE, CarLifePicture.paint(picture))
         }
     }
 
@@ -687,7 +777,7 @@ class CarLifeVideoActivity : Activity() {
                         val name = listOf(info.manufacturer, info.model)
                             .filter { it.isNotBlank() }
                             .joinToString(" ")
-                        if (name.isNotEmpty()) ticker.update("PHONE", name)
+                        CarLifePersistence.get(this@CarLifeVideoActivity).saveLastPhone(name)
                     }
                 }
 
@@ -698,7 +788,6 @@ class CarLifeVideoActivity : Activity() {
                         persistence.saveNegotiated(width, height)
                         textureView.surfaceTexture?.setDefaultBufferSize(width, height)
                         applyVideoTransform()
-                        ticker.update("CANVAS", "${width}×${height}")
                     }
                 }
 
@@ -709,25 +798,23 @@ class CarLifeVideoActivity : Activity() {
                                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             }.getOrNull()
                         }
-                        val text = "♪ ${info.artist} — ${info.song}".trim(' ', '—')
-                        if (cover == null && text.length <= 2) {
-                            hudMedia.visibility = View.GONE
-                            return@post
+                        val song = info.song.ifBlank { getString(R.string.media_unknown_song) }
+                        val artist = info.artist.ifBlank { getString(R.string.media_unknown_artist) }
+                        mediaTitle.text = song
+                        mediaArtist.text = artist
+                        expTitle.text = song
+                        expArtist.text = artist
+                        if (cover != null) {
+                            mediaCover.setImageBitmap(cover)
+                            expCover.setImageBitmap(cover)
                         }
-                        hudCover.visibility = if (cover != null) View.VISIBLE else View.GONE
-                        cover?.let { hudCover.setImageBitmap(it) }
-                        hudText.text = text
-                        hudProgress.visibility = View.GONE
-                        hudMedia.visibility = View.VISIBLE
                     }
                 }
 
                 override fun onMediaProgress(percent: Int) {
                     main.post {
-                        if (percent in 1..100 && hudMedia.visibility == View.VISIBLE) {
-                            hudProgress.progress = percent
-                            hudProgress.visibility = View.VISIBLE
-                        }
+                        mediaProgress.progress = percent
+                        expProgress.progress = percent
                     }
                 }
 
@@ -736,7 +823,7 @@ class CarLifeVideoActivity : Activity() {
                         lastGpsAt = System.currentTimeMillis()
                         // Reference app reports Location.speed * 100 (cm/s).
                         phoneKmh = (gps.speedCms * 36.0 / 1000.0).roundToInt()
-                        updateVehicleDisplay()
+                        renderSpeed(phoneKmh, "GPS")
                         CarLifeSessionLog.log(
                             this@CarLifeVideoActivity, "GPS",
                             "phone=${phoneKmh}kmh sats=${gps.satsUsed} fix=${gps.fix} head=${gps.heading}",
@@ -746,15 +833,13 @@ class CarLifeVideoActivity : Activity() {
 
                 override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
                     main.post {
-                        val text = listOfNotNull(
-                            info.roadName.takeIf { it.isNotBlank() },
-                            info.remainDistance.takeIf { it > 0 }?.let { "${it}m" },
-                        ).joinToString("  ")
-                        if (text.isEmpty()) {
-                            hudNavi.visibility = View.GONE
+                        val road = info.roadName.takeIf { it.isNotBlank() }
+                        if (road == null && info.remainDistance <= 0) {
+                            turnCapsule.visibility = View.GONE
                         } else {
-                            hudNavi.text = "↰ $text"
-                            hudNavi.visibility = View.VISIBLE
+                            turnTitle.text = road ?: getString(R.string.navi_turn_ahead)
+                            turnSub.text = if (info.remainDistance > 0) "${info.remainDistance} m" else ""
+                            turnCapsule.visibility = View.VISIBLE
                         }
                     }
                 }
@@ -771,26 +856,18 @@ class CarLifeVideoActivity : Activity() {
         Log.i(TAG, "state=$state detail=$detail")
         when {
             state.startsWith("phase:streaming") || state == "connected" -> {
-                ticker.update("LINK", "ONLINE", online = true)
                 main.removeCallbacks(demoTick)
                 if (CarLifePersistence.get(this).demoData()) {
                     main.post(demoTick)
                 } else {
-                    gauge.setGauge(0, "P", 0, isStandby = true)
-                    dataGear?.text = "P"
-                    dataRpm?.text = "--"
+                    renderSpeed(0, "")
                 }
                 showStatus(getString(R.string.carlife_projecting))
             }
 
             state == "disconnected" || state == "closed" || state == "stopped" -> {
                 main.removeCallbacks(demoTick)
-                gauge.setGauge(0, "P", 0, isStandby = true)
-                dataGear?.text = "P"
-                dataRpm?.text = "800"
-                ticker.update("LINK", "OFFLINE", red = true)
-                ticker.update("SPEED", "0 km/h")
-                ticker.update("GEAR", "P")
+                renderSpeed(0, "")
                 showStatus(getString(R.string.carlife_disconnected, detail ?: ""))
             }
 
@@ -800,12 +877,9 @@ class CarLifeVideoActivity : Activity() {
             state == "reconnecting" ->
                 showStatus(getString(R.string.state_reconnecting, detail ?: ""))
             state == "watchdog" -> showStatus(getString(R.string.state_watchdog))
-            else -> showStatus(localizedState(state, detail))
+            else -> showStatus(state + (detail?.let { " — $it" } ?: ""))
         }
     }
-
-    private fun localizedState(state: String, detail: String?): String =
-        state + (detail?.let { " — $it" } ?: "")
 
     private fun showStatus(text: String) {
         statusOverlay.text = text
@@ -882,6 +956,7 @@ class CarLifeVideoActivity : Activity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Float): Float = v * resources.displayMetrics.density
 
     companion object {
         private const val TAG = "CarLifeVideo"

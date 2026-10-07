@@ -711,4 +711,7 @@
     <string name="carlife_quick_foreground">Экран телефона</string>
     <string name="settings_sound">Звук</string>
     <string name="settings_tts_volume">Громкость голоса навигации</string>
+    <string name="media_unknown_song">Неизвестный трек</string>
+    <string name="media_unknown_artist">Неизвестный исполнитель</string>
+    <string name="navi_turn_ahead">Поворот впереди</string>
 </resources>

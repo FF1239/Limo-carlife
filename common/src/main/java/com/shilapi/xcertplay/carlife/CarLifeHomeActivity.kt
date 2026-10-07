@@ -36,10 +36,9 @@ class CarLifeHomeActivity : Activity() {
 
     private val clockTick = object : Runnable {
         override fun run() {
-            ticker.update(
-                "SYS",
-                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()),
-            )
+            val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            clockView.text = "SYS $now"
+            ticker.update("SYS", now)
             main.postDelayed(this, 15_000)
         }
     }
@@ -142,7 +141,7 @@ class CarLifeHomeActivity : Activity() {
         }
         statusChip = chip("STANDBY", CarbonTheme.RED)
         chipRow.addView(statusChip)
-        chipRow.addView(label(getString(R.string.home_waiting_phone), CarbonTheme.TEXT_DIM, 12f, 2f).apply {
+        chipRow.addView(label(getString(R.string.home_waiting_phone), CarbonTheme.TEXT_DIM, 12f, 0.2f).apply {
             setPadding(dp(14), 0, 0, 0)
         })
         hero.addView(chipRow, wrap())

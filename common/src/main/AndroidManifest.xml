@@ -120,6 +120,12 @@
             android:theme="@style/Theme.Xcertplay">
         </activity>
 
+        <activity
+            android:name="com.shilapi.xcertplay.carlife.CarLifeSettingsActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Xcertplay" />
+
         <service
             android:name="com.shilapi.xcertplay.carlife.CarLifeSessionService"
             android:exported="false"

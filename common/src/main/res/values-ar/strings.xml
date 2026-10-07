@@ -712,4 +712,7 @@
     <string name="carlife_quick_foreground">شاشة الهاتف</string>
     <string name="settings_sound">الصوت</string>
     <string name="settings_tts_volume">مستوى صوت الملاحة</string>
+    <string name="media_unknown_song">مقطوعة غير معروفة</string>
+    <string name="media_unknown_artist">فنان غير معروف</string>
+    <string name="navi_turn_ahead">انعطاف قادم</string>
 </resources>

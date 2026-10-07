@@ -723,4 +723,7 @@
     <string name="carlife_quick_foreground">Екран телефона</string>
     <string name="settings_sound">Звук</string>
     <string name="settings_tts_volume">Гучність голосу навігації</string>
+    <string name="media_unknown_song">Невідомий трек</string>
+    <string name="media_unknown_artist">Невідомий виконавець</string>
+    <string name="navi_turn_ahead">Поворот попереду</string>
 </resources>

@@ -711,4 +711,7 @@
     <string name="carlife_quick_foreground">Inicio del teléfono</string>
     <string name="settings_sound">Sonido</string>
     <string name="settings_tts_volume">Volumen de la voz de navegación</string>
+    <string name="media_unknown_song">Pista desconocida</string>
+    <string name="media_unknown_artist">Artista desconocido</string>
+    <string name="navi_turn_ahead">Giro próximo</string>
 </resources>

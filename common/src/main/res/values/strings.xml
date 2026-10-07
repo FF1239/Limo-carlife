@@ -762,4 +762,7 @@
     <string name="carlife_quick_foreground">Phone home</string>
     <string name="settings_sound">Sound</string>
     <string name="settings_tts_volume">Navigation voice volume</string>
+    <string name="media_unknown_song">Unknown track</string>
+    <string name="media_unknown_artist">Unknown artist</string>
+    <string name="navi_turn_ahead">Turn ahead</string>
 </resources>

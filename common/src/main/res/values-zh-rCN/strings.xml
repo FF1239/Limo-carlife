@@ -762,4 +762,7 @@
     <string name="carlife_quick_foreground">手机主页</string>
     <string name="settings_sound">声音</string>
     <string name="settings_tts_volume">导航语音音量</string>
+    <string name="media_unknown_song">未知曲目</string>
+    <string name="media_unknown_artist">未知艺人</string>
+    <string name="navi_turn_ahead">前方转向</string>
 </resources>
