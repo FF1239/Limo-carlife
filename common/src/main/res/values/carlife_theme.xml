@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="carlife_bg">#0F1114</color>
+
+    <!-- Launch theme for the CarLife surfaces: carbon background and the
+         carbon instrument glyph in the system splash (replaces the DiPlay
+         logo the shared theme would show). Pre-31 devices just get the
+         window background. -->
+    <style name="Theme.CarLifeLaunch" parent="Theme.Xcertplay">
+        <item name="android:windowBackground">@color/carlife_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/carlife_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_carlife_carbon</item>
+    </style>
+</resources>

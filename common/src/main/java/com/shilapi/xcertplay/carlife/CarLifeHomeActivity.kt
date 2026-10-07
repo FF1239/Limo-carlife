@@ -39,7 +39,6 @@ class CarLifeHomeActivity : Activity() {
             val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             clockView.text = "SYS $now"
             ring.setClock(now, SimpleDateFormat("MM月dd日 E", Locale.getDefault()).format(Date()))
-            ticker.update("SYS", now)
             main.postDelayed(this, 15_000)
         }
     }

@@ -43,6 +43,7 @@
             android:enabled="true"
             android:exported="true"
             android:icon="@drawable/ic_carlife_carbon"
+            android:theme="@style/Theme.CarLifeLaunch"
             android:targetActivity="com.shilapi.xcertplay.carlife.CarLifeHomeActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

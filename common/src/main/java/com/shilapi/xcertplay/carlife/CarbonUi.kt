@@ -357,6 +357,8 @@ class TelemetryBar(context: Context, attrs: AttributeSet? = null) : LinearLayout
             TextView(context).apply {
                 typeface = Typeface.MONOSPACE
                 textSize = 12f
+                isFocusable = false
+                isClickable = false
                 setPadding(0, 0, (24 * resources.displayMetrics.density).toInt(), 0)
                 row.addView(this)
             }

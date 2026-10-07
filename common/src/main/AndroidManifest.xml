@@ -59,10 +59,10 @@
 
         <!-- CarLife-only home: the launcher target; also handles USB attach. -->
         <activity android:name="com.shilapi.xcertplay.carlife.CarLifeHomeActivity"
+            android:theme="@style/Theme.CarLifeLaunch"
             android:exported="true" android:launchMode="singleTop"
             android:resizeableActivity="true"
-            android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-            android:theme="@style/Theme.Xcertplay">
+            android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
@@ -112,12 +112,12 @@
 
         <activity
             android:name="com.shilapi.xcertplay.carlife.CarLifeVideoActivity"
+            android:theme="@style/Theme.CarLifeLaunch"
             android:configChanges="density|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
-            android:screenOrientation="fullSensor"
-            android:theme="@style/Theme.Xcertplay">
+            android:screenOrientation="fullSensor">
         </activity>
 
         <!-- CarLife companion widget: next turn + song on the launcher. -->
@@ -135,15 +135,15 @@
 
         <activity
             android:name="com.shilapi.xcertplay.carlife.CarLifeAboutActivity"
+            android:theme="@style/Theme.CarLifeLaunch"
             android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.Xcertplay" />
+            android:resizeableActivity="true" />
 
         <activity
             android:name="com.shilapi.xcertplay.carlife.CarLifeSettingsActivity"
+            android:theme="@style/Theme.CarLifeLaunch"
             android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.Xcertplay" />
+            android:resizeableActivity="true" />
 
         <service
             android:name="com.shilapi.xcertplay.carlife.CarLifeSessionService"
