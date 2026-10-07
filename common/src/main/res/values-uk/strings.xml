@@ -739,4 +739,6 @@
     <string name="widget_no_media">Увімкніть музику на телефоні</string>
     <string name="state_scan_hint">Немає відповіді? Відкрийте CarLife на телефоні та спробуйте кабель даних, а не лише зарядний.</string>
     <string name="state_reconnect_hint">Перевірте екран телефона — можливо, там запит на проєкцію.</string>
+    <string name="ticker_about">Про застосунок ›</string>
+    <string name="about_credit">Незалежний проєкт GPL-3.0. Компонування та інженерні рішення вивчено з проєкту DiPlay / DiPlay-CN (CarPlay-хост, з якого виріс цей код). Не афілійований з Baidu; CarLife — протокол Baidu.</string>
 </resources>

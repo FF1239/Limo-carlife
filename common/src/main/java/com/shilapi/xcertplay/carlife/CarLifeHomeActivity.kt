@@ -139,6 +139,29 @@ class CarLifeHomeActivity : Activity() {
             typeface = Typeface.MONOSPACE
         }
         brand.addView(clockView)
+        brand.addView(TextView(this).apply {
+            text = "⚙"
+            setTextColor(CarbonTheme.TEXT_DIM)
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(6), dp(16), dp(6))
+            isClickable = true
+            setOnClickListener {
+                startActivity(Intent(this@CarLifeHomeActivity, CarLifeSettingsActivity::class.java))
+            }
+        })
+        brand.addView(TextView(this).apply {
+            text = getString(R.string.ticker_about)
+            setTextColor(CarbonTheme.TEXT_FAINT)
+            textSize = 14f
+            typeface = Typeface.MONOSPACE
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(6), dp(4), dp(6))
+            isClickable = true
+            setOnClickListener {
+                startActivity(Intent(this@CarLifeHomeActivity, CarLifeAboutActivity::class.java))
+            }
+        })
         column.addView(brand, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
@@ -200,12 +223,6 @@ class CarLifeHomeActivity : Activity() {
         }
         actions.addAction(getString(R.string.home_usb)) { openProjection(wired = true) }
         actions.addAction(getString(R.string.home_wireless)) { openProjection(wired = false) }
-        actions.addAction(getString(R.string.home_settings)) {
-            startActivity(Intent(this, CarLifeSettingsActivity::class.java))
-        }
-        actions.addAction(getString(R.string.home_carplay)) {
-            startActivity(Intent(this, com.shilapi.xcertplay.CarPlayHostActivity::class.java))
-        }
         right.addView(actions, wrap().apply { topMargin = dp(20) })
         mainArea.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 

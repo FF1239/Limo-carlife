@@ -136,25 +136,6 @@ class CarLifeSettingsActivity : Activity() {
         behaviourPanel.addView(actionChip(getString(R.string.settings_export_log)) { exportLog() })
         column.addView(behaviourPanel)
 
-        // about section (reuses the app-wide updater/locale, CarLife entry points)
-        column.addView(panelTitle(getString(R.string.settings_about), dp(26), dp(10)))
-        val aboutPanel = panel()
-        aboutPanel.addView(actionChip(getString(R.string.settings_language)) {
-            com.shilapi.xcertplay.AppLocale.showPicker(this)
-        })
-        aboutPanel.addView(actionChip(getString(R.string.settings_check_update)) { checkUpdate() })
-        aboutPanel.addView(TextView(this).apply {
-            text = getString(
-                R.string.settings_version_row,
-                com.shilapi.xcertplay.AppUpdate.currentVersion(context),
-            )
-            setTextColor(TEXT_DIM)
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, dp(10), 0, dp(2))
-        })
-        column.addView(aboutPanel)
-
         // sound section
         column.addView(panelTitle(getString(R.string.settings_sound), dp(26), dp(10)))
         val soundPanel = panel()

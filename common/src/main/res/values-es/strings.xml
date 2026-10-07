@@ -727,4 +727,6 @@
     <string name="widget_no_media">Reproduce música en el teléfono</string>
     <string name="state_scan_hint">¿Sin respuesta? Abre CarLife en el teléfono y prueba un cable de datos, no uno de solo carga.</string>
     <string name="state_reconnect_hint">Mira la pantalla del teléfono: puede haber una petición de proyección.</string>
+    <string name="ticker_about">Acerca de ›</string>
+    <string name="about_credit">Proyecto independiente GPL-3.0. Su disposición y patrones de ingeniería se aprenden del proyecto DiPlay / DiPlay-CN (el host CarPlay del que proviene este código). Sin afiliación con Baidu; CarLife es un protocolo de Baidu.</string>
 </resources>

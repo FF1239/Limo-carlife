@@ -728,4 +728,6 @@
     <string name="widget_no_media">شغّل الموسيقى على الهاتف</string>
     <string name="state_scan_hint">لا استجابة؟ افتح CarLife على الهاتف وجرّب كبل بيانات وليس كبل شحن فقط.</string>
     <string name="state_reconnect_hint">تحقق من شاشة الهاتف — قد يوجد طلب إسقاط.</string>
+    <string name="ticker_about">حول ›</string>
+    <string name="about_credit">مشروع مستقل برخصة GPL-3.0. التخطيط وأنماط الهندسة مستفادة من مشروع DiPlay / DiPlay-CN (مضيف CarLife الذي نشأ منه هذا الكود). غير تابع لشركة Baidu؛ وCarLife بروتوكول من Baidu.</string>
 </resources>

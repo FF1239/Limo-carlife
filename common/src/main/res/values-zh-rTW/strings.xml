@@ -83,4 +83,6 @@
     <string name="widget_no_media">在手機上播放音樂</string>
     <string name="state_scan_hint">沒反應?請確認手機已開啟 CarLife,並換一條資料線(而非充電線)。</string>
     <string name="state_reconnect_hint">請查看手機螢幕上是否有投影確認提示。</string>
+    <string name="ticker_about">關於 ›</string>
+    <string name="about_credit">本應用為獨立的 GPL-3.0 作品,介面與工程實作借鑑自 DiPlay / DiPlay-CN 專案(本程式碼衍生自其 CarPlay 宿主)。與百度無隸屬關係;CarLife 為百度協定。</string>
 </resources>

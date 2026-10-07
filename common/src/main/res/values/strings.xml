@@ -778,4 +778,6 @@
     <string name="widget_no_media">Play music on the phone</string>
     <string name="state_scan_hint">No response? Open CarLife on the phone and try a data cable, not a charge-only one.</string>
     <string name="state_reconnect_hint">Check the phone screen for a projection prompt.</string>
+    <string name="ticker_about">About ›</string>
+    <string name="about_credit">An independent GPL-3.0 project. Its layout and engineering patterns are learned from the DiPlay / DiPlay-CN project (the CarPlay host this code grew out of). Not affiliated with Baidu; CarLife is a Baidu protocol.</string>
 </resources>

@@ -134,6 +134,12 @@
         </receiver>
 
         <activity
+            android:name="com.shilapi.xcertplay.carlife.CarLifeAboutActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Xcertplay" />
+
+        <activity
             android:name="com.shilapi.xcertplay.carlife.CarLifeSettingsActivity"
             android:exported="false"
             android:resizeableActivity="true"

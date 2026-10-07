@@ -778,4 +778,6 @@
     <string name="widget_no_media">在手机上播放音乐</string>
     <string name="state_scan_hint">没反应?请确认手机已打开 CarLife,并换一根数据线(而非充电线)。</string>
     <string name="state_reconnect_hint">请查看手机屏幕上是否有投影确认提示。</string>
+    <string name="ticker_about">关于 ›</string>
+    <string name="about_credit">本应用为独立的 GPL-3.0 作品,界面与工程实现借鉴自 DiPlay / DiPlay-CN 项目(本代码衍生自其 CarPlay 宿主)。与百度无隶属关系;CarLife 为百度协议。</string>
 </resources>
