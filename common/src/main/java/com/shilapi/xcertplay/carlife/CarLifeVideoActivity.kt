@@ -78,6 +78,7 @@ class CarLifeVideoActivity : Activity() {
     private lateinit var expProgress: android.widget.ProgressBar
     private lateinit var expPlayLabel: TextView
     private var mediaPlaying = false
+    private var lastMediaKey = ""
 
     private val hideStatus = Runnable { statusOverlay.visibility = View.GONE }
 
@@ -803,6 +804,11 @@ class CarLifeVideoActivity : Activity() {
 
                 override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
                     main.post {
+                        // 0.2.10 lesson: phones resend identical metadata; skip
+                        // identical payloads to avoid needless view churn.
+                        val key = "${info.song}|${info.artist}|${info.albumArt.size}"
+                        if (key == lastMediaKey) return@post
+                        lastMediaKey = key
                         val cover = info.albumArt.takeIf { it.isNotEmpty() }?.let { bytes ->
                             runCatching {
                                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)

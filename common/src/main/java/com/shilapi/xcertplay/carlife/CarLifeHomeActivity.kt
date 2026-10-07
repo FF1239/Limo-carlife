@@ -58,6 +58,21 @@ class CarLifeHomeActivity : Activity() {
         if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             openProjectionWhenAutoConnect()
         }
+
+        // 0.2.13 lesson: silent throttled update check; a newer release opens
+        // a dialog that jumps straight to the settings update entry.
+        com.shilapi.xcertplay.AppUpdate.autoCheck(this) { release ->
+            if (release != null && !isFinishing) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.update_available_no_size, release.tag))
+                    .setMessage(com.shilapi.xcertplay.AppUpdate.plainNotes(release.notes, 600))
+                    .setPositiveButton(R.string.home_settings) { _, _ ->
+                        startActivity(Intent(this, CarLifeSettingsActivity::class.java))
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

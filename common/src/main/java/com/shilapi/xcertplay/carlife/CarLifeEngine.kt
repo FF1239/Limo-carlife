@@ -459,19 +459,43 @@ class CarLifeEngine(
 
     // ---- video decoder ----
 
+    /**
+     * Decoder setup with capability fallback (DiPlay 0.2.12 lesson: some
+     * decoders reject unusual canvases): retry at standard sizes, always
+     * releasing the codec on partial failure, and report the real canvas.
+     */
     private fun setupDecoder() {
         releaseVideo()
         if (surface == null || !surface.isValid) return
-        try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, decoderWidth, decoderHeight)
-            val c = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            c.configure(format, surface, null, 0)
-            c.start()
-            codec = c
-        } catch (e: Exception) {
-            Log.e(TAG, "decoder setup failed", e)
-            codec = null
+        val candidates = linkedSetOf(
+            decoderWidth to decoderHeight,
+            1280 to 720,
+            800 to 480,
+        )
+        for ((w, h) in candidates) {
+            try {
+                val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h)
+                val c = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                try {
+                    c.configure(format, surface, null, 0)
+                    c.start()
+                } catch (e: Exception) {
+                    runCatching { c.release() }
+                    throw e
+                }
+                codec = c
+                if (w != decoderWidth || h != decoderHeight) {
+                    Log.w(TAG, "decoder fallback ${decoderWidth}x${decoderHeight} -> ${w}x${h}")
+                    decoderWidth = w
+                    decoderHeight = h
+                    uiListener.onEncoderSize(w, h)
+                }
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "decoder init failed ${w}x${h}", e)
+            }
         }
+        Log.e(TAG, "decoder setup failed at every fallback size")
     }
 
     private fun feedDecoder(h264: ByteArray, ptsUs: Long) {
@@ -515,24 +539,44 @@ class CarLifeEngine(
             AudioFormat.CHANNEL_OUT_STEREO
         }
         val encoding = if (init.sampleFormat == 8) AudioFormat.ENCODING_PCM_8BIT else AudioFormat.ENCODING_PCM_16BIT
-        return try {
-            val minBuf = AudioTrack.getMinBufferSize(sampleRate, channels, encoding)
-            AudioTrack(
-                stream,
-                sampleRate,
-                channels,
-                encoding,
-                maxOf(minBuf, 8 * 1024),
-                AudioTrack.MODE_STREAM,
-            ).apply { play() }
-        } catch (e: Exception) {
-            Log.e(TAG, "audio track init failed: $init", e)
-            null
-        }
+            return try {
+                val minBuf = AudioTrack.getMinBufferSize(sampleRate, channels, encoding)
+                val track = AudioTrack(
+                    stream,
+                    sampleRate,
+                    channels,
+                    encoding,
+                    maxOf(minBuf, 64 * 1024),
+                    AudioTrack.MODE_STREAM,
+                )
+                try {
+                    track.play()
+                } catch (e: Exception) {
+                    runCatching { track.release() }
+                    throw e
+                }
+                track
+            } catch (e: Exception) {
+                Log.e(TAG, "audio track init failed: $init", e)
+                null
+            }
     }
 
+    /**
+     * Non-blocking PCM write (DiPlay 0.2.0 lesson: blocking writes starve the
+     * session thread on phone-side stalls, killing handshake and watchdog).
+     * When the track buffer is full the remainder is dropped instead.
+     */
     private fun writePcm(track: AudioTrack?, pcm: ByteArray) {
-        track?.let { t -> runCatching { t.write(pcm, 0, pcm.size) } }
+        track ?: return
+        runCatching {
+            var offset = 0
+            while (offset < pcm.size) {
+                val written = track.write(pcm, offset, pcm.size - offset, AudioTrack.WRITE_NON_BLOCKING)
+                if (written <= 0) break
+                offset += written
+            }
+        }
     }
 
     private fun releaseAudio() {
