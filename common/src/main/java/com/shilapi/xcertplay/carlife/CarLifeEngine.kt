@@ -80,6 +80,10 @@ class CarLifeEngine(
     @Volatile
     private var reconnectAttempt = 0
 
+    /** Guards against the six per-channel onClosed calls stacking reconnects. */
+    @Volatile
+    private var reconnectScheduled = false
+
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     fun start() {
@@ -127,6 +131,7 @@ class CarLifeEngine(
         userStopped = true
         watchdog.removeCallbacksAndMessages(null)
         reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectScheduled = false
         running = false
         session?.close("engine stopped")
         session = null
@@ -152,12 +157,21 @@ class CarLifeEngine(
         override fun onConnected(channel: Int) {
             if (channel == CarLife.CHANNEL_CMD) {
                 session?.startHandshake()
-                emitState("connected")
+                uiListener.onEngineState("connected")
             }
         }
 
         override fun onClosed(reason: String) {
-            emitState("disconnected", reason)
+            // Wireless drops (phone-side resets, wifi hiccups) recover exactly
+            // like the wired path - without this the projection dies on the
+            // first phone-side reset.
+            releaseVideo()
+            releaseAudio()
+            if (running && !userStopped) {
+                scheduleReconnect(reason)
+            } else {
+                emitState("disconnected", reason)
+            }
         }
     }
 
@@ -212,10 +226,13 @@ class CarLifeEngine(
      */
     private fun scheduleReconnect(reason: String) {
         if (userStopped || !running) return
+        if (reconnectScheduled) return
+        reconnectScheduled = true
         val delayMs = (1000L shl minOf(reconnectAttempt, 4)).coerceAtMost(15_000L)
         reconnectAttempt++
         emitState("reconnecting", "$reason (retry $reconnectAttempt in ${delayMs / 1000}s)")
         reconnectHandler.postDelayed({
+            reconnectScheduled = false
             if (userStopped || !running) return@postDelayed
             aoa?.stop()
             aoa = null
