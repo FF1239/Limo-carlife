@@ -60,6 +60,12 @@ class CarLifeSession(
         /** CMD message outside the known set (e.g. GPS) — default no-op. */
         fun onUnknownCmd(id: Int, size: Int) {}
 
+        /** CAR_GPS (mobile -> HU): the phone's GNSS fix, speed in cm/s. */
+        fun onCarGps(gps: CarLifeMessages.CarGps) {}
+
+        /** CAR_VELOCITY (mobile -> HU): wheel-speed estimate. */
+        fun onCarVelocity(speed: CarLifeMessages.CarSpeed) {}
+
         fun onErrorCode(error: CarLifeMessages.ErrorCode)
 
         fun onBackground()
@@ -207,7 +213,19 @@ class CarLifeSession(
 
     /** RSA/AES encryption handshake responses. */
     fun sendRsaPublicKey(base64PublicKey: String) {
-        sendCmd(CarLife.Cmd.HU_RSA_PUBLIC_KEY_RESPONSE, CarLifeMessages.RsaPublicKey(base64PublicKey).encode())
+        sendCmd(CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST, CarLifeMessages.RsaPublicKey(base64PublicKey).encode())
+    }
+
+    /**
+     * Subscribes to the phone's car-data modules (0 = GPS). The phone answers
+     * CAR_DATA_SUBSCRIBE_DONE and then streams CAR_GPS while it has a fix.
+     */
+    fun sendCarDataSubscribe(items: List<CarLifeMessages.VehicleInfo>) {
+        sendCmd(CarLife.Cmd.CAR_DATA_SUBSCRIBE, CarLifeMessages.VehicleInfoList(items.size, items).encode())
+    }
+
+    fun sendCarDataSubscribeStart(moduleId: Int, flag: Int = 1, frequency: Int = 0) {
+        sendCmd(CarLife.Cmd.CAR_DATA_SUBSCRIBE_START, CarLifeMessages.VehicleInfo(moduleId, flag, frequency).encode())
     }
 
     fun close(reason: String = "closed") {
@@ -289,6 +307,8 @@ class CarLifeSession(
             CarLife.Cmd.MIC_RECORD_END -> listener.onMicRecordEnd()
             CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> listener.onRsaPublicKeyRequest()
             CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> listener.onAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
+            CarLife.Cmd.CAR_GPS -> listener.onCarGps(CarLifeMessages.CarGps.decode(payload))
+            CarLife.Cmd.CAR_VELOCITY -> listener.onCarVelocity(CarLifeMessages.CarSpeed.decode(payload))
             else -> listener.onUnknownCmd(serviceType.toInt(), payload.size)
         }
     }

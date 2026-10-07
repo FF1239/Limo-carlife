@@ -702,4 +702,9 @@
     <string name="state_wireless_connecting">جارٍ الاتصال عبر Wi-Fi (%1$s)…</string>
     <string name="state_reconnecting">جارٍ إعادة الاتصال (%1$s)</string>
     <string name="state_watchdog">لا توجد بيانات فيديو، جارٍ إعادة بناء الجلسة…</string>
+    <string name="settings_daynight_auto">تلقائي (مستشعر الإضاءة)</string>
+    <string name="settings_daynight_day">نهار</string>
+    <string name="settings_daynight_night">ليل</string>
+    <string name="settings_session_log">سجل الجلسة</string>
+    <string name="settings_log_none">لا يوجد ملف بعد - يظهر بعد أول اتصال.</string>
 </resources>

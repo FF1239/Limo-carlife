@@ -752,4 +752,9 @@
     <string name="settings_accent_red">Red</string>
     <string name="settings_accent_blue">Blue</string>
     <string name="settings_accent_orange">Orange</string>
+    <string name="settings_daynight_auto">Auto (light sensor)</string>
+    <string name="settings_daynight_day">Day</string>
+    <string name="settings_daynight_night">Night</string>
+    <string name="settings_session_log">Session log</string>
+    <string name="settings_log_none">No file yet — appears after the first connection.</string>
 </resources>

@@ -84,10 +84,27 @@ class CarLifeSettingsActivity : Activity() {
         // behaviour section
         column.addView(panelTitle(getString(R.string.settings_behaviour), dp(26), dp(10)))
         val behaviourPanel = panel()
-        behaviourPanel.addView(toggle(getString(R.string.settings_daynight), persistence.dayNightMode() == CarLifePersistence.DAY_NIGHT_NIGHT) { on ->
-            persistence.saveDayNightMode(
-                if (on) CarLifePersistence.DAY_NIGHT_NIGHT else CarLifePersistence.DAY_NIGHT_DAY)
+        // day/night: three-way (auto = light sensor)
+        behaviourPanel.addView(TextView(this).apply {
+            text = getString(R.string.settings_daynight)
+            setTextColor(TEXT_DIM)
+            textSize = 13f
+            setPadding(0, dp(10), 0, dp(6))
         })
+        val dnRow = LinearLayout(this)
+        listOf(
+            CarLifePersistence.DAY_NIGHT_SYSTEM to getString(R.string.settings_daynight_auto),
+            CarLifePersistence.DAY_NIGHT_DAY to getString(R.string.settings_daynight_day),
+            CarLifePersistence.DAY_NIGHT_NIGHT to getString(R.string.settings_daynight_night),
+        ).forEachIndexed { i, (mode, label) ->
+            if (i > 0) dnRow.addView(View(this), LinearLayout.LayoutParams(dp(10), 1))
+            dnRow.addView(chip(label, persistence.dayNightMode() == mode) {
+                persistence.saveDayNightMode(mode)
+                recreate()
+            }, LinearLayout.LayoutParams(0, dp(46), 1f))
+        }
+        behaviourPanel.addView(dnRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         behaviourPanel.addView(toggle(getString(R.string.settings_autoconnect), persistence.autoConnect()) {
             persistence.saveAutoConnect(it)
         })
@@ -99,6 +116,20 @@ class CarLifeSettingsActivity : Activity() {
         })
         behaviourPanel.addView(toggle(getString(R.string.settings_demo_data), persistence.demoData()) {
             persistence.saveDemoData(it)
+        })
+        // session log (no-adb debugging: file lives in Android/data files/logs)
+        behaviourPanel.addView(TextView(this).apply {
+            text = getString(R.string.settings_session_log)
+            setTextColor(TEXT)
+            textSize = 15f
+            setPadding(0, dp(12), 0, dp(2))
+        })
+        behaviourPanel.addView(TextView(this).apply {
+            val f = CarLifeSessionLog.currentFile()
+            text = f?.absolutePath ?: getString(R.string.settings_log_none)
+            setTextColor(TEXT_DIM)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
         })
         column.addView(behaviourPanel)
 

@@ -1,4 +1,4 @@
-package com.shilapi.xcertplay.carlife
+﻿package com.shilapi.xcertplay.carlife
 
 import android.content.Context
 import android.media.AudioFormat
@@ -38,6 +38,9 @@ class CarLifeEngine(
 
     /** Phone navigation next-turn info for HUD cards. */
     fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {}
+
+    /** Phone GNSS fix (subscribed after handshake); speed is cm/s. */
+    fun onCarGps(gps: CarLifeMessages.CarGps) {}
     }
 
     /** WIRED uses AOA USB; WIRELESS connects to the phone's six TCP ports. */
@@ -65,7 +68,7 @@ class CarLifeEngine(
     @Volatile
     private var userStopped = false
 
-    /** Last successful start parameters — reconnect reuses them verbatim. */
+    /** Last successful start parameters; reconnect reuses them verbatim. */
     private var lastMode: Mode = Mode.WIRED
     private var lastWirelessHost: java.net.InetAddress? = null
 
@@ -84,6 +87,7 @@ class CarLifeEngine(
     fun start(newMode: Mode, wirelessHost: java.net.InetAddress? = null) {
         if (running) return
         running = true
+        CarLifeSessionLog.newSession(context)
         mode = newMode
         lastMode = newMode
         lastWirelessHost = wirelessHost
@@ -93,11 +97,11 @@ class CarLifeEngine(
                 aoa = transport
                 session = CarLifeSession(transport, this)
                 transport.start()
-                uiListener.onEngineState("scanning")
+                emitState("scanning")
             }
             Mode.WIRELESS -> {
                 val host = wirelessHost ?: run {
-                    uiListener.onEngineState("wireless", "no host address")
+                    emitState("wireless", "no host address")
                     running = false
                     return
                 }
@@ -105,9 +109,15 @@ class CarLifeEngine(
                 tcp = transport
                 session = CarLifeSession(transport, this)
                 transport.start()
-                uiListener.onEngineState("wireless-connecting", host.hostAddress)
+                emitState("wireless-connecting", host.hostAddress)
             }
         }
+    }
+
+    /** Central state tap: on-device session file + UI callback. */
+    private fun emitState(state: String, detail: String? = null) {
+        CarLifeSessionLog.log(context, "ENGINE", "$state${detail?.let { " | $it" } ?: ""}")
+        uiListener.onEngineState(state, detail)
     }
 
     fun stop() {
@@ -123,7 +133,7 @@ class CarLifeEngine(
         tcp = null
         releaseVideo()
         releaseAudio()
-        uiListener.onEngineState("stopped")
+        emitState("stopped")
     }
 
     /**
@@ -138,12 +148,12 @@ class CarLifeEngine(
         override fun onConnected(channel: Int) {
             if (channel == CarLife.CHANNEL_CMD) {
                 session?.startHandshake()
-                uiListener.onEngineState("connected")
+                emitState("connected")
             }
         }
 
         override fun onClosed(reason: String) {
-            uiListener.onEngineState("disconnected", reason)
+            emitState("disconnected", reason)
         }
     }
 
@@ -180,11 +190,11 @@ class CarLifeEngine(
         releaseVideo()
         releaseAudio()
         scheduleReconnect(reason)
-        uiListener.onEngineState("disconnected", reason)
+        emitState("disconnected", reason)
     }
 
     /**
-     * Auto-reconnect with capped backoff (1s, 2s, 4s … max 15s), unless the
+     * Auto-reconnect with capped backoff (1s, 2s, 4s; max 15s), unless the
      * user stopped the engine. Keeps the projection alive across USB hiccups
      * and phone-side session drops, mirroring DiPlay's connection behaviour.
      */
@@ -192,7 +202,7 @@ class CarLifeEngine(
         if (userStopped || !running) return
         val delayMs = (1000L shl minOf(reconnectAttempt, 4)).coerceAtMost(15_000L)
         reconnectAttempt++
-        uiListener.onEngineState("reconnecting", "$reason (retry $reconnectAttempt in ${delayMs / 1000}s)")
+        emitState("reconnecting", "$reason (retry $reconnectAttempt in ${delayMs / 1000}s)")
         reconnectHandler.postDelayed({
             if (userStopped || !running) return@postDelayed
             aoa?.stop()
@@ -206,13 +216,13 @@ class CarLifeEngine(
     }
 
     override fun onState(state: AoaTransport.State, detail: String?) {
-        uiListener.onEngineState(state.name.lowercase(), detail)
+        emitState(state.name.lowercase(), detail)
     }
 
     // ---- CarLifeSession.Listener ----
 
     override fun onPhase(phase: CarLifeSession.Phase) {
-        uiListener.onEngineState("phase:${phase.name.lowercase()}")
+        emitState("phase:${phase.name.lowercase()}")
         when (phase) {
             CarLifeSession.Phase.ENCODER_INIT -> armStreamWatchdog()
             else -> Unit
@@ -220,7 +230,7 @@ class CarLifeEngine(
     }
 
     /**
-     * Live-testing finding: a phone stuck in the "已连接" limbo accepts the
+     * Live-testing finding: a phone stuck in the "connected" limbo accepts the
      * handshake but never answers VIDEO_ENCODER_INIT (no projection consent),
      * and a granted session can also stop flowing after the phone locks. One
      * rolling watchdog covers both: if no video packet arrived since the last
@@ -241,7 +251,7 @@ class CarLifeEngine(
         watchdog.postDelayed({
             if (!running) return@postDelayed
             if (videoPacketsSinceArm == 0L) {
-                uiListener.onEngineState("watchdog", "no video flowing")
+                emitState("watchdog", "no video flowing")
                 session?.close("watchdog: no video flowing")
             } else {
                 videoPacketsSinceArm = 0
@@ -259,7 +269,7 @@ class CarLifeEngine(
             reconnectAttempt = 0
             session?.sendAuthenRequest()
             // Real CarLife waits for the HU introduction before answering the
-            // authen challenge (desktop parity — verified sequence).
+            // authen challenge (desktop parity, verified sequence).
             session?.sendHuInfo(
                 CarLifeMessages.DeviceInfo(
                     os = "android",
@@ -270,14 +280,14 @@ class CarLifeEngine(
                     sdkInt = android.os.Build.VERSION.SDK_INT,
                 ),
             )
-            uiListener.onEngineState("connected")
+            emitState("connected")
         } else {
             session?.close("version mismatch: $matchStatus")
         }
     }
 
     override fun onAuthenResponse(response: com.diplay.carlife.core.CarLifeMessages.AuthenResponse) {
-        // Strict 4-step order, then feature answer and the encoder proposal —
+        // Strict 4-step order, then feature answer and the encoder proposal;
         // the sequence verified against real CarLife. BT OOB identity goes out
         // only with a real adapter address (real CarLife+ stalls on an empty
         // one; the verified desktop session sent no BT OOB at all).
@@ -295,6 +305,14 @@ class CarLifeEngine(
             listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
         )
         session?.sendVideoEncoderInit(p.videoWidth(), p.videoHeight(), p.videoFrameRate())
+        // Subscribe to the phone's GNSS module (0 = GPS, flag 1 = GCJ-02): the
+        // phone then streams CAR_GPS, giving the instruments a real speed.
+        session?.sendCarDataSubscribe(listOf(CarLifeMessages.VehicleInfo(MODULE_GPS_DATA, 1, 0)))
+        session?.sendCarDataSubscribeStart(MODULE_GPS_DATA)
+    }
+
+    override fun onCarGps(gps: CarLifeMessages.CarGps) {
+        uiListener.onCarGps(gps)
     }
 
     override fun onMicRecordStart() {
@@ -306,6 +324,13 @@ class CarLifeEngine(
     }
 
     override fun onMobileInfo(info: CarLifeMessages.DeviceInfo) {
+        val name = listOf(info.manufacturer, info.model)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+        if (name.isNotEmpty()) {
+            CarLifePersistence.get(context).saveLastPhone(name)
+            CarLifeSessionLog.log(context, "PHONE", name)
+        }
         uiListener.onMobileInfo(info)
     }
 
@@ -367,13 +392,13 @@ class CarLifeEngine(
     }
 
     override fun onUnknownCmd(id: Int, size: Int) {
-        // Unknown mobile→HU CMD (GPS lives in this range) — logged so a live
+        // Unknown mobile-HU CMD (GPS lives in this range), logged so a live
         // capture run identifies the message id for a future decoder.
-        Log.i(TAG, "unknown cmd id=0x%04X size=%d".format(id, size))
+        CarLifeSessionLog.log(context, "UNKNOWN_CMD", "id=0x%04X size=%d".format(id, size))
     }
 
     override fun onErrorCode(error: CarLifeMessages.ErrorCode) {
-        Log.w(TAG, "phone error: ${error.errorCode}")
+        CarLifeSessionLog.log(context, "PHONE_ERROR", "code=${error.errorCode}")
     }
 
     override fun onBackground() = Unit
@@ -382,7 +407,7 @@ class CarLifeEngine(
         stopMic()
         releaseVideo()
         releaseAudio()
-        uiListener.onEngineState("disconnected", reason)
+        emitState("disconnected", reason)
     }
 
     override fun onRsaPublicKeyRequest() {
@@ -550,6 +575,9 @@ class CarLifeEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val MIC_SAMPLE_RATE = 16_000
         private const val MIC_PACKET_BYTES = 1024
+
+        /** CarLife car-data module id for the phone GNSS feed. */
+        private const val MODULE_GPS_DATA = 0
 
         /** Encoder-init / video-flow watchdog window (live-testing: stalls). */
         private const val STREAM_WATCHDOG_MS = 12_000L

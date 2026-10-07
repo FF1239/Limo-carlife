@@ -701,4 +701,9 @@
     <string name="state_wireless_connecting">Подключение по Wi-Fi (%1$s)…</string>
     <string name="state_reconnecting">Переподключение (%1$s)</string>
     <string name="state_watchdog">Видео не идёт, пересоздание сеанса…</string>
+    <string name="settings_daynight_auto">Авто (датчик света)</string>
+    <string name="settings_daynight_day">День</string>
+    <string name="settings_daynight_night">Ночь</string>
+    <string name="settings_session_log">Журнал сеанса</string>
+    <string name="settings_log_none">Файла ещё нет — появится после первого подключения.</string>
 </resources>

@@ -174,7 +174,11 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
         canvas.drawText(if (standby) "RPM ×100" else "km/h", cx, ty + dp(24f), unitPaint)
         subPaint.textSize = dp(13f)
         canvas.drawText(
-            if (standby) "CARLIFE · STANDBY" else "GEAR $gear · RPM $rpm",
+            when {
+                standby -> "CARLIFE · STANDBY"
+                rpm < 0 -> "GEAR $gear · GPS"
+                else -> "GEAR $gear · RPM $rpm"
+            },
             cx, ty + dp(46f), subPaint,
         )
     }

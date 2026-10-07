@@ -26,7 +26,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.diplay.carlife.core.CarLife
 import com.diplay.carlife.core.CarLifeMessages
+import com.shilapi.xcertplay.AndroidAmbientLight
 import com.shilapi.xcertplay.host.R
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -54,20 +56,23 @@ class CarLifeVideoActivity : Activity() {
 
     /**
      * Demo vehicle source until a real CAN feed exists: a gently wandering
-     * speed that drives the ring, gear and rpm readouts.
+     * speed that drives the ring, gear and rpm readouts. Suppressed while the
+     * phone's GPS feed is fresh (see [onCarGps]).
      */
     private var demoSpeed = 0
+    private var lastGpsAt = 0L
+
+    /** Auto day/night via the head unit's light sensor (SYSTEM mode only). */
+    private var ambientLight: AndroidAmbientLight? = null
+    private var ambientNight = false
     private val demoTick = object : Runnable {
         override fun run() {
-            demoSpeed = (demoSpeed + Random.nextInt(-9, 12)).coerceIn(0, 132)
-            val gear = when {
-                demoSpeed == 0 -> "P"
-                demoSpeed < 20 -> "1"
-                demoSpeed < 40 -> "2"
-                demoSpeed < 65 -> "3"
-                demoSpeed < 95 -> "4"
-                else -> "5"
+            if (System.currentTimeMillis() - lastGpsAt < GPS_FRESH_MS) {
+                main.postDelayed(this, 900)
+                return
             }
+            demoSpeed = (demoSpeed + Random.nextInt(-9, 12)).coerceIn(0, 132)
+            val gear = gearForSpeed(demoSpeed)
             val rpm = if (demoSpeed == 0) 800 else 900 + (demoSpeed * 23) % 4200
             gauge.setGauge(demoSpeed, gear, rpm, isStandby = false)
             dataGear?.text = gear
@@ -76,6 +81,15 @@ class CarLifeVideoActivity : Activity() {
             ticker.update("GEAR", gear)
             main.postDelayed(this, 900)
         }
+    }
+
+    private fun gearForSpeed(kmh: Int): String = when {
+        kmh == 0 -> "P"
+        kmh < 20 -> "1"
+        kmh < 40 -> "2"
+        kmh < 65 -> "3"
+        kmh < 95 -> "4"
+        else -> "5"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +102,13 @@ class CarLifeVideoActivity : Activity() {
         }
 
         buildUi()
+
+        if (CarLifePersistence.get(this).dayNightMode() == CarLifePersistence.DAY_NIGHT_SYSTEM) {
+            val light = AndroidAmbientLight(this)
+            if (light.start { lux -> main.post { applyAmbientLux(lux) } }) {
+                ambientLight = light
+            }
+        }
 
         if (intent.getStringExtra("mode") == "wireless") {
             main.post { startWirelessScan() }
@@ -451,6 +472,22 @@ class CarLifeVideoActivity : Activity() {
         textureView.setTransform(matrix)
     }
 
+    /** Hysteresis so passing shadows/tunnels do not flicker the picture. */
+    private fun applyAmbientLux(lux: Float) {
+        if (lux.isNaN()) return
+        val night = when {
+            lux > 15f -> false
+            lux < 8f -> true
+            else -> ambientNight
+        }
+        if (night != ambientNight) {
+            ambientNight = night
+            picture.night = night
+            applyPicture()
+            CarLifeSessionLog.log(this, "NIGHT", "lux=$lux night=$night")
+        }
+    }
+
     /** Saves the current projection frame into this app's external pictures dir. */
     private fun takeScreenshot() {
         val bitmap = textureView.bitmap
@@ -570,6 +607,24 @@ class CarLifeVideoActivity : Activity() {
                             hudMedia.visibility = View.VISIBLE
                             hudMedia.text = "♪ ${info.artist} — ${info.song}".trim(' ', '—')
                         }
+                    }
+                }
+
+                override fun onCarGps(gps: CarLifeMessages.CarGps) {
+                    main.post {
+                        lastGpsAt = System.currentTimeMillis()
+                        // Reference app reports Location.speed * 100 (cm/s).
+                        val kmh = (gps.speedCms * 36.0 / 1000.0).roundToInt()
+                        val gear = gearForSpeed(kmh)
+                        gauge.setGauge(kmh, gear, -1, isStandby = false)
+                        dataGear?.text = gear
+                        dataRpm?.text = "GPS"
+                        ticker.update("SPEED", "$kmh km/h", red = kmh > 100)
+                        ticker.update("GEAR", gear)
+                        CarLifeSessionLog.log(
+                            this@CarLifeVideoActivity, "GPS",
+                            "speed=${kmh}kmh sats=${gps.satsUsed} fix=${gps.fix} head=${gps.heading}",
+                        )
                     }
                 }
 
@@ -700,6 +755,8 @@ class CarLifeVideoActivity : Activity() {
 
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
+        ambientLight?.stop()
+        ambientLight = null
         engine?.stop()
         engine = null
         CarLifeSessionService.stop(this)
@@ -710,5 +767,8 @@ class CarLifeVideoActivity : Activity() {
 
     companion object {
         private const val TAG = "CarLifeVideo"
+
+        /** Demo data yields to the phone GPS feed for this long after a fix. */
+        private const val GPS_FRESH_MS = 5_000L
     }
 }

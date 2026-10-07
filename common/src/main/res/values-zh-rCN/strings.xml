@@ -752,4 +752,9 @@
     <string name="settings_accent_red">红</string>
     <string name="settings_accent_blue">蓝</string>
     <string name="settings_accent_orange">橙</string>
+    <string name="settings_daynight_auto">自动(光线传感器)</string>
+    <string name="settings_daynight_day">白天</string>
+    <string name="settings_daynight_night">夜间</string>
+    <string name="settings_session_log">会话日志</string>
+    <string name="settings_log_none">尚未生成,连接一次后出现。</string>
 </resources>

@@ -419,4 +419,79 @@ object CarLifeMessages {
             }
         }
     }
+
+    /**
+     * CAR_GPS payload (mobile -> HU): the phone's own GNSS fix. Field numbers
+     * from the Baidu CarlifeCarGpsProto; speed is cm/s (Location.speed * 100
+     * in the reference app), lat/lon are GCJ-02 scaled ints, heading degrees.
+     */
+    data class CarGps(
+        val latitude: Int,
+        val longitude: Int,
+        val speedCms: Int,
+        val heading: Int,
+        val fix: Int,
+        val satsUsed: Int,
+        val timestampSec: Long,
+    ) {
+        companion object {
+            fun decode(bytes: ByteArray): CarGps {
+                var m = CarGps(0, 0, 0, 0, 0, 0, 0)
+                val r = ProtoReader(bytes)
+                var f = r.nextField()
+                while (f != 0) {
+                    m = when (f) {
+                        3 -> m.copy(latitude = r.readInt32())
+                        4 -> m.copy(longitude = r.readInt32())
+                        6 -> m.copy(speedCms = r.readUint32().toInt())
+                        7 -> m.copy(heading = r.readUint32().toInt())
+                        14 -> m.copy(fix = r.readUint32().toInt())
+                        18 -> m.copy(satsUsed = r.readUint32().toInt())
+                        25 -> m.copy(timestampSec = r.readUint64())
+                        else -> m.also { r.skip() }
+                    }
+                    f = r.nextField()
+                }
+                return m
+            }
+        }
+    }
+
+    /** CAR_VELOCITY payload (mobile -> HU): wheel-speed estimate. */
+    data class CarSpeed(val speed: Int, val timestamp: Long) {
+        companion object {
+            fun decode(bytes: ByteArray): CarSpeed {
+                var m = CarSpeed(0, 0)
+                val r = ProtoReader(bytes)
+                var f = r.nextField()
+                while (f != 0) {
+                    m = when (f) {
+                        1 -> m.copy(speed = r.readUint32().toInt())
+                        2 -> m.copy(timestamp = r.readUint64())
+                        else -> m.also { r.skip() }
+                    }
+                    f = r.nextField()
+                }
+                return m
+            }
+        }
+    }
+
+    /** One car-data subscription entry (module / format / frequency). */
+    data class VehicleInfo(val moduleId: Int, val flag: Int, val frequency: Int) {
+        fun encode(): ByteArray = ProtoWriter()
+            .writeInt32(1, moduleId)
+            .writeInt32(2, flag)
+            .writeInt32(3, frequency)
+            .toByteArray()
+    }
+
+    /** CAR_DATA_SUBSCRIBE payload: entry count + repeated [VehicleInfo]. */
+    data class VehicleInfoList(val cnt: Int, val items: List<VehicleInfo>) {
+        fun encode(): ByteArray {
+            val w = ProtoWriter().writeInt32(1, cnt)
+            items.forEach { w.writeMessage(2, it.encode()) }
+            return w.toByteArray()
+        }
+    }
 }

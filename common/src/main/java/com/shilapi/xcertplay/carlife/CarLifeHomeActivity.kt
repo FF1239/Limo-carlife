@@ -50,7 +50,7 @@ class CarLifeHomeActivity : Activity() {
         buildUi()
         main.post(clockTick)
         ticker.update("LINK", "OFFLINE", red = true)
-        ticker.update("PHONE", "--- ---")
+        ticker.update("PHONE", CarLifePersistence.get(this).lastPhone() ?: "--- ---")
         ticker.update("AUDIO", "--- kHz")
         ticker.update("CANVAS", canvasLabel())
 

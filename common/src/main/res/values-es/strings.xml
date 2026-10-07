@@ -701,4 +701,9 @@
     <string name="state_wireless_connecting">Conectando por Wi-Fi (%1$s)…</string>
     <string name="state_reconnecting">Reconectando (%1$s)</string>
     <string name="state_watchdog">Sin vídeo, reconstruyendo la sesión…</string>
+    <string name="settings_daynight_auto">Automático (sensor de luz)</string>
+    <string name="settings_daynight_day">Día</string>
+    <string name="settings_daynight_night">Noche</string>
+    <string name="settings_session_log">Registro de sesión</string>
+    <string name="settings_log_none">Aún no hay archivo; aparece tras la primera conexión.</string>
 </resources>

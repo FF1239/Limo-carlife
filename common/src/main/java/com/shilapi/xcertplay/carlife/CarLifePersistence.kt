@@ -94,6 +94,13 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         prefs.edit().putString(KEY_ACCENT, v).apply()
     }
 
+    /** Last connected phone (manufacturer + model) for the home ticker. */
+    fun lastPhone(): String? = prefs.getString(KEY_LAST_PHONE, null)
+
+    fun saveLastPhone(v: String) {
+        prefs.edit().putString(KEY_LAST_PHONE, v).apply()
+    }
+
     companion object {
         private const val FILE = "carlife_settings"
 
@@ -112,6 +119,7 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         private const val KEY_WIRELESS = "wireless"
         private const val KEY_DEMO_DATA = "demo_data"
         private const val KEY_ACCENT = "accent"
+        private const val KEY_LAST_PHONE = "last_phone"
 
         const val DAY_NIGHT_SYSTEM = 0
         const val DAY_NIGHT_DAY = 1
