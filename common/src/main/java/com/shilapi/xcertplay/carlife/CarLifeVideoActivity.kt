@@ -61,13 +61,20 @@ class CarLifeVideoActivity : Activity() {
      */
     private var demoSpeed = 0
     private var lastGpsAt = 0L
+    private var phoneKmh = -1
+
+    /** Head unit's own GNSS (preferred when present) vs the phone's CAR_GPS feed. */
+    private var unitGps: UnitGpsSpeedSource? = null
+    private var unitKmh = -1
+    private var unitGpsAt = 0L
 
     /** Auto day/night via the head unit's light sensor (SYSTEM mode only). */
     private var ambientLight: AndroidAmbientLight? = null
     private var ambientNight = false
     private val demoTick = object : Runnable {
         override fun run() {
-            if (System.currentTimeMillis() - lastGpsAt < GPS_FRESH_MS) {
+            val gpsFresh = System.currentTimeMillis() - maxOf(lastGpsAt, unitGpsAt) < GPS_FRESH_MS
+            if (gpsFresh) {
                 main.postDelayed(this, 900)
                 return
             }
@@ -83,19 +90,36 @@ class CarLifeVideoActivity : Activity() {
         }
     }
 
-    private fun gearForSpeed(kmh: Int): String = when {
-        kmh == 0 -> "P"
-        kmh < 20 -> "1"
-        kmh < 40 -> "2"
-        kmh < 65 -> "3"
-        kmh < 95 -> "4"
-        else -> "5"
+    private fun gearForSpeed(kmh: Int): String = if (kmh == 0) "P" else "D"
+
+    /**
+     * Picks the freshest real speed: the unit's own GNSS wins ties (roof
+     * antenna), the phone's CAR_GPS feed backs it up, demo data fills gaps.
+     */
+    private fun updateVehicleDisplay() {
+        val now = System.currentTimeMillis()
+        val unitFresh = now - unitGpsAt < GPS_FRESH_MS && unitKmh >= 0
+        val phoneFresh = now - lastGpsAt < GPS_FRESH_MS && phoneKmh >= 0
+        val kmh = when {
+            unitFresh && phoneFresh -> if (unitGpsAt >= lastGpsAt) unitKmh else phoneKmh
+            unitFresh -> unitKmh
+            phoneFresh -> phoneKmh
+            else -> return
+        }
+        val gear = gearForSpeed(kmh)
+        gauge.setGauge(kmh, gear, -1, isStandby = false)
+        dataGear?.text = gear
+        dataRpm?.text = "GPS"
+        ticker.update("SPEED", "$kmh km/h", red = kmh > 100)
+        ticker.update("GEAR", gear)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CarbonTheme.load(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Projection screen stays on while the session runs.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -110,16 +134,34 @@ class CarLifeVideoActivity : Activity() {
             }
         }
 
+        // Unit-side GNSS speed when the unit has a GPS receiver and the user
+        // granted the location permission (the phone CAR_GPS feed is the fallback).
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            val source = UnitGpsSpeedSource(this) { kmh ->
+                unitKmh = kmh
+                unitGpsAt = System.currentTimeMillis()
+                updateVehicleDisplay()
+            }
+            if (source.start()) unitGps = source
+        }
+
         if (intent.getStringExtra("mode") == "wireless") {
             main.post { startWirelessScan() }
         }
         showStatus(getString(R.string.carlife_connecting))
 
-        // FGS microphone type requires RECORD_AUDIO granted at runtime.
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        // FGS microphone type needs RECORD_AUDIO; the unit GNSS speed source
+        // needs fine location. Request both together, degrade gracefully.
+        val missing = mutableListOf(
+            android.Manifest.permission.RECORD_AUDIO,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ).filter {
+            checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            requestPermissions(missing.toTypedArray(), 1)
         }
     }
 
@@ -614,16 +656,11 @@ class CarLifeVideoActivity : Activity() {
                     main.post {
                         lastGpsAt = System.currentTimeMillis()
                         // Reference app reports Location.speed * 100 (cm/s).
-                        val kmh = (gps.speedCms * 36.0 / 1000.0).roundToInt()
-                        val gear = gearForSpeed(kmh)
-                        gauge.setGauge(kmh, gear, -1, isStandby = false)
-                        dataGear?.text = gear
-                        dataRpm?.text = "GPS"
-                        ticker.update("SPEED", "$kmh km/h", red = kmh > 100)
-                        ticker.update("GEAR", gear)
+                        phoneKmh = (gps.speedCms * 36.0 / 1000.0).roundToInt()
+                        updateVehicleDisplay()
                         CarLifeSessionLog.log(
                             this@CarLifeVideoActivity, "GPS",
-                            "speed=${kmh}kmh sats=${gps.satsUsed} fix=${gps.fix} head=${gps.heading}",
+                            "phone=${phoneKmh}kmh sats=${gps.satsUsed} fix=${gps.fix} head=${gps.heading}",
                         )
                     }
                 }
@@ -757,6 +794,8 @@ class CarLifeVideoActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         ambientLight?.stop()
         ambientLight = null
+        unitGps?.stop()
+        unitGps = null
         engine?.stop()
         engine = null
         CarLifeSessionService.stop(this)

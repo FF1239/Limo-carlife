@@ -10,9 +10,9 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
 
     // ---- video negotiation ----
 
-    fun videoWidth(): Int = prefs.getInt(KEY_VIDEO_W, 1280)
+    fun videoWidth(): Int = prefs.getInt(KEY_VIDEO_W, 1920)
 
-    fun videoHeight(): Int = prefs.getInt(KEY_VIDEO_H, 480)
+    fun videoHeight(): Int = prefs.getInt(KEY_VIDEO_H, 720)
 
     fun videoFrameRate(): Int = prefs.getInt(KEY_VIDEO_FPS, 30)
 
