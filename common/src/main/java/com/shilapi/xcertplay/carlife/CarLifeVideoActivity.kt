@@ -50,14 +50,10 @@ class CarLifeVideoActivity : Activity() {
     private var phoneWidth = CarLife.DEFAULT_VIDEO_WIDTH
     private var phoneHeight = CarLife.DEFAULT_VIDEO_HEIGHT
 
-    // turn card (draggable overlay; survives phone app switches)
+    // turn card (long-press to drag; survives phone app switches)
     private lateinit var turnCard: CarLifeTurnCardView
     private var turnX = 4
     private var turnY = 8
-    private var turnDragStartX = 0f
-    private var turnDragStartY = 0f
-    private var turnOriginX = 0f
-    private var turnOriginY = 0f
 
     // speed capsule
     private lateinit var speedText: TextView
@@ -245,32 +241,54 @@ class CarLifeVideoActivity : Activity() {
             (resources.displayMetrics.widthPixels * 0.34f * 0.21f).toInt(),
         ) {})
         turnCard.post { applyTurnCardPosition() }
+        // Long-press to drag: plain touches fall through to the projection
+        // underneath, so the card never eats navigation taps.
+        var dragging = false
+        var lastRawX = 0f
+        var lastRawY = 0f
+        turnCard.setOnLongClickListener {
+            dragging = true
+            lastRawX = 0f
+            lastRawY = 0f
+            it.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            true
+        }
         turnCard.setOnTouchListener { v, ev ->
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    turnDragStartX = ev.rawX; turnDragStartY = ev.rawY
-                    turnOriginX = (v.layoutParams as FrameLayout.LayoutParams).leftMargin.toFloat()
-                    turnOriginY = (v.layoutParams as FrameLayout.LayoutParams).topMargin.toFloat()
-                    true
+                MotionEvent.ACTION_DOWN -> if (!dragging) {
+                    return@setOnTouchListener false
+                } else {
+                    lastRawX = ev.rawX
+                    lastRawY = ev.rawY
+                    return@setOnTouchListener true
                 }
 
-                MotionEvent.ACTION_MOVE -> {
+                MotionEvent.ACTION_MOVE -> if (!dragging) {
+                    return@setOnTouchListener false
+                } else {
                     val p = v.layoutParams as FrameLayout.LayoutParams
-                    p.leftMargin = (turnOriginX + ev.rawX - turnDragStartX).toInt()
-                        .coerceIn(0, root.width - v.width)
-                    p.topMargin = (turnOriginY + ev.rawY - turnDragStartY).toInt()
-                        .coerceIn(0, root.height - v.height)
+                    p.leftMargin = (p.leftMargin + (ev.rawX - lastRawX)).toInt()
+                        .coerceIn(0, rootLayout.width - v.width)
+                    p.topMargin = (p.topMargin + (ev.rawY - lastRawY)).toInt()
+                        .coerceIn(0, rootLayout.height - v.height)
+                    lastRawX = ev.rawX
+                    lastRawY = ev.rawY
                     v.layoutParams = p
-                    true
+                    return@setOnTouchListener true
                 }
 
-                MotionEvent.ACTION_UP -> {
-                    turnX = ((v.layoutParams as FrameLayout.LayoutParams).leftMargin * 100f
-                        / (root.width - v.width).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
-                    turnY = ((v.layoutParams as FrameLayout.LayoutParams).topMargin * 100f
-                        / (root.height - v.height).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
-                    CarLifePersistence.get(this).saveTurnCardPosition(turnX, turnY)
-                    true
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) {
+                        dragging = false
+                        turnX = ((v.layoutParams as FrameLayout.LayoutParams).leftMargin * 100f
+                            / (rootLayout.width - v.width).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
+                        turnY = ((v.layoutParams as FrameLayout.LayoutParams).topMargin * 100f
+                            / (rootLayout.height - v.height).coerceAtLeast(1)).toInt().coerceIn(0, 100) / 2 * 2
+                        CarLifePersistence.get(this).saveTurnCardPosition(turnX, turnY)
+                        true
+                    } else {
+                        false
+                    }
                 }
 
                 else -> false
@@ -336,34 +354,53 @@ class CarLifeVideoActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
+        fun colBtn(label: TextView, onClick: () -> Unit) {
+            column.addView(roundButton(label, 52, onClick), LinearLayout.LayoutParams(
+                dp(52), dp(52)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                setMargins(0, dp(7), 0, dp(7))
+            })
+        }
         btnModeLabel = TextView(this).apply {
             text = "♪"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             gravity = Gravity.CENTER
         }
-        column.addView(roundButton(btnModeLabel) { toggleAppMode() })
-        column.addView(space())
+        colBtn(btnModeLabel) { toggleAppMode() }
         btnPauseLabel = TextView(this).apply {
             text = "❚❚"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             gravity = Gravity.CENTER
         }
-        column.addView(roundButton(btnPauseLabel) {
+        colBtn(btnPauseLabel) {
             videoPaused = !videoPaused
             engine?.setVideoPaused(videoPaused)
             btnPauseLabel.text = if (videoPaused) "►" else "❚❚"
-        })
-        column.addView(space())
-        column.addView(roundButton(TextView(this).apply {
+        }
+        colBtn(TextView(this).apply {
             text = "◎"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             gravity = Gravity.CENTER
-        }) { takeScreenshot() })
-        column.addView(space())
-        column.addView(roundButton(TextView(this).apply {
+        }) { takeScreenshot() }
+        // connection switch: rescan wireless / wired reconnect / manual IP
+        colBtn(TextView(this).apply {
+            text = "⇄"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }) { showConnectionSwitcher() }
+        // back to the CarLife home (the projection hides system bars, so a
+        // visible home key is the only way back)
+        colBtn(TextView(this).apply {
+            text = "⌂"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            gravity = Gravity.CENTER
+        }) { finish() }
+        colBtn(TextView(this).apply {
             text = "✕"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
@@ -371,21 +408,20 @@ class CarLifeVideoActivity : Activity() {
         }) {
             engine?.stop()
             finish()
-        })
-        column.addView(space())
-        column.addView(roundButton(TextView(this).apply {
+        }
+        colBtn(TextView(this).apply {
             text = "≡"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
             gravity = Gravity.CENTER
         }) {
             setVisibleAnimated(settingsPanel, settingsPanel.visibility != View.VISIBLE)
-        })
+        }
         root.addView(column, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.END or Gravity.CENTER_VERTICAL,
         ).apply {
-            val m = dp(16)
+            val m = dp(14)
             setMargins(0, m, m, m)
         })
 
@@ -606,10 +642,14 @@ class CarLifeVideoActivity : Activity() {
     }
 
     private fun roundButton(label: TextView, onClick: () -> Unit): View =
+        roundButton(label, 56, onClick)
+
+    private fun roundButton(label: TextView, size: Int, onClick: () -> Unit): View =
         FrameLayout(this).apply {
             background = glass(26f)
-            addView(label, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(label, FrameLayout.LayoutParams(dp(size), dp(size)))
+            minimumWidth = dp(size)
+            minimumHeight = dp(size)
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
@@ -641,6 +681,26 @@ class CarLifeVideoActivity : Activity() {
         p.leftMargin = turnX * maxX / 100
         p.topMargin = turnY * maxY / 100
         turnCard.layoutParams = p
+    }
+
+    /** Lets the user switch transports without leaving the projection. */
+    private fun showConnectionSwitcher() {
+        val options = arrayOf(
+            getString(R.string.carlife_wired_connect),
+            getString(R.string.carlife_wireless_connect),
+            getString(R.string.carlife_manual_ip_button),
+        )
+        android.app.AlertDialog.Builder(this)
+            .setItems(options) { _, which ->
+                engine?.stop()
+                engine = null
+                when (which) {
+                    0 -> startEngine(currentSurface(), CarLifeEngine.Mode.WIRED)
+                    1 -> startWirelessScan()
+                    2 -> promptForIp()
+                }
+            }
+            .show()
     }
 
     private fun toggleMediaPlay() {

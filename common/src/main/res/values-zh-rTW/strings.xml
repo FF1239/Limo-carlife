@@ -1,6 +1,6 @@
 <resources>
     <!-- CarLife 通道 -->
-    <string name="carlife_channel_title">CarLife 頻道</string>
+    <string name="carlife_channel_title">Limo</string>
     <string name="carlife_connecting">正在連線 CarLife…</string>
     <string name="carlife_projecting">CarLife 投影中</string>
     <string name="carlife_disconnected">CarLife 已斷線(%1$s)</string>
@@ -62,7 +62,7 @@
     <string name="settings_check_update">檢查更新</string>
     <string name="settings_language">應用程式語言</string>
     <string name="settings_custom_scale">自訂畫面縮放</string>
-    <string name="settings_version_row">版本 %1$s · CarLife 頻道</string>
+    <string name="settings_version_row">Limo v%1$s</string>
 
     <!-- 狀態與操作 -->
     <string name="state_scanning">正在掃描 USB 上的 CarLife 手機…</string>
@@ -78,11 +78,13 @@
     <string name="navi_turn_ahead">前方轉向</string>
 
     <!-- 小工具 -->
-    <string name="widget_navi_label">CarLife 助手</string>
+    <string name="widget_navi_label">Limo</string>
     <string name="widget_wait_phone">等待手機接入…</string>
     <string name="widget_no_media">在手機上播放音樂</string>
     <string name="state_scan_hint">沒反應?請確認手機已開啟 CarLife,並換一條資料線(而非充電線)。</string>
     <string name="state_reconnect_hint">請查看手機螢幕上是否有投影確認提示。</string>
     <string name="ticker_about">關於 ›</string>
     <string name="about_credit">本應用為獨立的 GPL-3.0 作品,介面與工程實作借鑑自 DiPlay / DiPlay-CN 專案(本程式碼衍生自其 CarPlay 宿主)。與百度無隸屬關係;CarLife 為百度協定。</string>
+    <string name="update_view_page">查看發布頁</string>
+    <string name="update_overwrite_note">注意:安裝此上游版本會覆蓋 Limo(與上游同為 com.shihab.diplay.cn 套件名)。為自己的版本發版後,才能在應用內自更新。</string>
 </resources>

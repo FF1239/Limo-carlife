@@ -19,11 +19,11 @@ import java.util.concurrent.Executors
  * project's stable key, so the installer updates the installed app in place and keeps settings.
  */
 object AppUpdate {
-    private const val REPO_PATH = "serein-morii/DiPlay-CN"
+    private const val REPO_PATH = "FF1239/Limo"
     private const val GITHUB_LATEST = "https://api.github.com/repos/$REPO_PATH/releases/latest"
-    private const val GITEE_LATEST = "https://gitee.com/api/v5/repos/oneeyear/DiPlay-CN/releases/latest"
+    private const val GITEE_LATEST = "https://api.github.com/repos/$REPO_PATH/releases/latest"
     private const val ACCEPT = "application/vnd.github+json"
-    private const val USER_AGENT = "DiPlay-CN-Updater"
+    private const val USER_AGENT = "Limo-Updater"
     private const val CONNECT_TIMEOUT = 10_000
     private const val READ_TIMEOUT = 20_000
     private const val MAX_APK_BYTES = 200L * 1024 * 1024
@@ -57,7 +57,7 @@ object AppUpdate {
         CHANNEL_MIRROR2 to "https://ghproxy.net/",
     )
 
-    @Volatile private var channel = CHANNEL_GITEE
+    @Volatile private var channel = CHANNEL_GITHUB
 
     /** The settings page stores the chosen channel; the updater picks it up before each call. */
     fun setChannel(choice: Int) {

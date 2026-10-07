@@ -24,33 +24,47 @@ object SubnetScanner {
     private const val PROBE_PORT = CarLife.MD_PORT_CMD
     private const val CONNECT_TIMEOUT_MS = 150
 
-    /** Returns the first address whose port 7240 accepts a connection. */
+    /**
+     * Probes the /24 of every active IPv4 interface with a bounded worker
+     * pool (one thread per address once crashed phones that cap pthreads -
+     * the 0.2.11 lesson never ship 250+ threads).
+     */
     fun findPhone(onFound: (InetAddress) -> Unit, onDone: () -> Unit): Thread {
-        val candidates = subnetAddresses()
-        var done = false
-        val lock = Any()
-        val threads = candidates.map { addr ->
-            thread(name = "carlife-probe-${addr.hostAddress}") {
-                if (probe(addr)) {
-                    synchronized(lock) {
-                        if (!done) {
-                            done = true
-                            Log.i(TAG, "CarLife phone found at ${addr.hostAddress}")
-                            onFound(addr)
-                        }
+        return thread(name = "carlife-scan") {
+            var reported = false
+            val lock = Any()
+            fun report(found: Boolean, addr: InetAddress?) {
+                synchronized(lock) {
+                    if (reported) return
+                    reported = true
+                    if (found && addr != null) {
+                        Log.i(TAG, "CarLife phone found at ${addr.hostAddress}")
+                        onFound(addr)
+                    } else {
+                        onDone()
                     }
                 }
             }
-        }
-        return thread(name = "carlife-scan-join") {
-            threads.forEach { it.join() }
-            synchronized(lock) {
-                if (!done) {
-                    done = true
-                    onDone()
+            try {
+                val queue = java.util.concurrent.ConcurrentLinkedQueue(subnetAddresses())
+                val workers = List(16) { index ->
+                    thread(name = "carlife-probe-$index") {
+                        while (true) {
+                            val addr = queue.poll() ?: break
+                            if (probe(addr)) {
+                                report(true, addr)
+                                return@thread
+                            }
+                        }
+                    }
                 }
+                workers.forEach { it.join() }
+                report(false, null)
+            } catch (t: Throwable) {
+                Log.w(TAG, "scan aborted", t)
+                report(false, null)
             }
-        }.apply { start() }
+        }
     }
 
     private fun probe(address: InetAddress): Boolean = try {

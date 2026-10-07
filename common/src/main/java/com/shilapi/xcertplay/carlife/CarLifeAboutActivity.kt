@@ -139,17 +139,41 @@ class CarLifeAboutActivity : Activity() {
         Toast.makeText(this, getString(R.string.settings_check_update), Toast.LENGTH_SHORT).show()
         AppUpdate.check { release, error ->
             runOnUiThread {
-                val message = when {
-                    release != null && AppUpdate.isAvailable(release, this) ->
-                        getString(R.string.update_available_no_size, release.tag)
-                    release != null -> getString(R.string.up_to_date)
-                    else -> "${getString(R.string.settings_check_update)}: $error"
+                when {
+                    release != null && AppUpdate.isAvailable(release, this) -> {
+                        // Newer upstream release found. Same package name as Limo:
+                        // installing it replaces Limo, so we surface the release
+                        // page instead of auto-installing.
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle(getString(R.string.update_available_no_size, release.tag))
+                            .setMessage(
+                                AppUpdate.plainNotes(release.notes, 500) + "\n\n" +
+                                    getString(R.string.update_overwrite_note),
+                            )
+                            .setPositiveButton(getString(R.string.update_view_page)) { _, _ ->
+                                runCatching {
+                                    startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(release.notesUrl),
+                                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            }
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .show()
+                    }
+
+                    release != null -> Toast.makeText(
+                        this, getString(R.string.up_to_date), Toast.LENGTH_SHORT,
+                    ).show()
+
+                    else -> android.app.AlertDialog.Builder(this)
+                        .setTitle(getString(R.string.settings_check_update))
+                        .setMessage("${getString(R.string.settings_check_update)}: $error")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
                 }
-                android.app.AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.settings_check_update))
-                    .setMessage(message)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show()
             }
         }
     }

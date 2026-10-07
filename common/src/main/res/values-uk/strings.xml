@@ -659,7 +659,7 @@
     <string name="update_downloading">Завантаження оновлення…</string>
     <string name="update_install_failed">Інсталятор не відкрився. Дозвольте DiPlay встановлювати невідомі застосунки та повторіть.</string>
     <!-- Канал CarLife -->
-    <string name="carlife_channel_title">Канал CarLife</string>
+    <string name="carlife_channel_title">Limo</string>
     <string name="carlife_connecting">Підключення CarLife…</string>
     <string name="carlife_projecting">CarLife: проєкція</string>
     <string name="carlife_disconnected">CarLife відʼєднано (%1$s)</string>
@@ -733,12 +733,14 @@
     <string name="log_exported">Експортовано до Завантажень: %1$s</string>
     <string name="log_export_failed">Поки немає що експортувати</string>
     <string name="settings_about">Про застосунок</string>
-    <string name="settings_version_row">Версія %1$s · канал CarLife</string>
-    <string name="widget_navi_label">Помічник CarLife</string>
+    <string name="settings_version_row">Limo v%1$s</string>
+    <string name="widget_navi_label">Limo</string>
     <string name="widget_wait_phone">Очікування телефона…</string>
     <string name="widget_no_media">Увімкніть музику на телефоні</string>
     <string name="state_scan_hint">Немає відповіді? Відкрийте CarLife на телефоні та спробуйте кабель даних, а не лише зарядний.</string>
     <string name="state_reconnect_hint">Перевірте екран телефона — можливо, там запит на проєкцію.</string>
     <string name="ticker_about">Про застосунок ›</string>
     <string name="about_credit">Незалежний проєкт GPL-3.0. Компонування та інженерні рішення вивчено з проєкту DiPlay / DiPlay-CN (CarPlay-хост, з якого виріс цей код). Не афілійований з Baidu; CarLife — протокол Baidu.</string>
+    <string name="update_view_page">Відкрити сторінку релізу</string>
+    <string name="update_overwrite_note">Увага: встановлення цього upstream-релізу замінить Limo (той самий package name).</string>
 </resources>

@@ -421,17 +421,40 @@ class CarLifeSettingsActivity : Activity() {
         android.widget.Toast.makeText(this, getString(R.string.state_scanning), android.widget.Toast.LENGTH_SHORT).show()
         com.shilapi.xcertplay.AppUpdate.check { release, error ->
             runOnUiThread {
-                val message = when {
-                    release != null && com.shilapi.xcertplay.AppUpdate.isAvailable(release, this) ->
-                        getString(com.shilapi.xcertplay.host.R.string.update_available, release.tag)
-                    release != null -> getString(com.shilapi.xcertplay.host.R.string.up_to_date)
-                    else -> "${getString(R.string.settings_check_update)}: $error"
+                when {
+                    release != null && com.shilapi.xcertplay.AppUpdate.isAvailable(release, this) -> {
+                        // Same package name as the upstream app: show the release
+                        // page instead of auto-installing over Limo.
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle(getString(R.string.update_available_no_size, release.tag))
+                            .setMessage(
+                                com.shilapi.xcertplay.AppUpdate.plainNotes(release.notes, 500) + "\n\n" +
+                                    getString(R.string.update_overwrite_note),
+                            )
+                            .setPositiveButton(getString(R.string.update_view_page)) { _, _ ->
+                                runCatching {
+                                    startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(release.notesUrl),
+                                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            }
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .show()
+                    }
+
+                    release != null -> android.widget.Toast.makeText(
+                        this, getString(R.string.up_to_date), android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+
+                    else -> android.app.AlertDialog.Builder(this)
+                        .setTitle(getString(R.string.settings_check_update))
+                        .setMessage("${getString(R.string.settings_check_update)}: $error")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
                 }
-                android.app.AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.settings_check_update))
-                    .setMessage(message)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show()
             }
         }
     }

@@ -123,7 +123,7 @@ class CarLifeHomeActivity : Activity() {
         brand.addView(View(this).apply { setBackgroundColor(CarbonTheme.RED) },
             LinearLayout.LayoutParams(dp(4), dp(16)))
         brand.addView(TextView(this).apply {
-            text = "CARLIFE-HU"
+            text = "LIMO"
             setTextColor(CarbonTheme.TEXT)
             textSize = 14f
             letterSpacing = 0.22f
@@ -166,11 +166,12 @@ class CarLifeHomeActivity : Activity() {
         column.addView(View(this).apply { setBackgroundColor(CarbonTheme.HAIRLINE) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
 
-        // ---- main area: left hero, right ring
+        // ---- main area: adaptive (landscape split / portrait stack) ----
+        val portrait = resources.displayMetrics.widthPixels < resources.displayMetrics.heightPixels
         val mainArea = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(56), dp(8), dp(56), dp(8))
+            orientation = if (portrait) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = if (portrait) Gravity.CENTER_HORIZONTAL else Gravity.CENTER_VERTICAL
+            setPadding(dp(if (portrait) 24 else 56), dp(8), dp(if (portrait) 24 else 56), dp(8))
         }
 
         val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -186,7 +187,7 @@ class CarLifeHomeActivity : Activity() {
         hero.addView(TextView(this).apply {
             text = getString(R.string.home_headline)
             setTextColor(Color.WHITE)
-            textSize = 46f
+            textSize = if (portrait) 44f else 64f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(16), 0, 0)
         }, wrap())
@@ -194,8 +195,11 @@ class CarLifeHomeActivity : Activity() {
             label = getString(R.string.home_connect)
             onAction = { openProjection(wired = null) }
         }
-        hero.addView(connectButton, LinearLayout.LayoutParams(
-            dp(400), dp(56)).apply { topMargin = dp(28) })
+        hero.addView(connectButton, (if (portrait) {
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
+        } else {
+            LinearLayout.LayoutParams(dp(400), dp(56))
+        }).apply { topMargin = dp(28) })
         val caps = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(
             getString(R.string.home_cap_video),
@@ -209,21 +213,27 @@ class CarLifeHomeActivity : Activity() {
         hero.addView(label(getString(R.string.home_hint_wireless), CarbonTheme.TEXT_FAINT, 13f, 0f).apply {
             setPadding(0, dp(18), 0, 0)
         }, wrap())
-        mainArea.addView(hero, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.08f))
+        mainArea.addView(hero, if (portrait) LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ) else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.08f))
 
         val right = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
         ring = StandbyRingView(this)
-        right.addView(ring, LinearLayout.LayoutParams(dp(270), dp(270)))
+        right.addView(ring, LinearLayout.LayoutParams(
+            dp(if (portrait) 220 else 270), dp(if (portrait) 220 else 270)))
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
         }
         actions.addAction(getString(R.string.home_usb)) { openProjection(wired = true) }
         actions.addAction(getString(R.string.home_wireless)) { openProjection(wired = false) }
         right.addView(actions, wrap().apply { topMargin = dp(20) })
-        mainArea.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        mainArea.addView(right, if (portrait) LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(10) } else LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         column.addView(mainArea, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))

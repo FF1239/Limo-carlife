@@ -647,7 +647,7 @@
     <string name="update_downloading">Descargando actualización…</string>
     <string name="update_install_failed">No se abrió el instalador. Permite a DiPlay instalar apps desconocidas e inténtalo de nuevo.</string>
     <!-- Canal CarLife -->
-    <string name="carlife_channel_title">Canal CarLife</string>
+    <string name="carlife_channel_title">Limo</string>
     <string name="carlife_connecting">Conectando CarLife…</string>
     <string name="carlife_projecting">CarLife proyectando</string>
     <string name="carlife_disconnected">CarLife desconectado (%1$s)</string>
@@ -721,12 +721,14 @@
     <string name="log_exported">Exportado a Descargas: %1$s</string>
     <string name="log_export_failed">Nada que exportar todavía</string>
     <string name="settings_about">Acerca de</string>
-    <string name="settings_version_row">Versión %1$s · canal CarLife</string>
-    <string name="widget_navi_label">Asistente CarLife</string>
+    <string name="settings_version_row">Limo v%1$s</string>
+    <string name="widget_navi_label">Limo</string>
     <string name="widget_wait_phone">Esperando el teléfono…</string>
     <string name="widget_no_media">Reproduce música en el teléfono</string>
     <string name="state_scan_hint">¿Sin respuesta? Abre CarLife en el teléfono y prueba un cable de datos, no uno de solo carga.</string>
     <string name="state_reconnect_hint">Mira la pantalla del teléfono: puede haber una petición de proyección.</string>
     <string name="ticker_about">Acerca de ›</string>
     <string name="about_credit">Proyecto independiente GPL-3.0. Su disposición y patrones de ingeniería se aprenden del proyecto DiPlay / DiPlay-CN (el host CarPlay del que proviene este código). Sin afiliación con Baidu; CarLife es un protocolo de Baidu.</string>
+    <string name="update_view_page">Ver página de la versión</string>
+    <string name="update_overwrite_note">Ojo: instalar esta versión upstream reemplaza Limo (mismo nombre de paquete).</string>
 </resources>

@@ -692,7 +692,7 @@
     <string name="update_allow_unknown">在刚打开的页面允许 DiPlay 安装未知应用，返回后自动继续安装。</string>
 
     <!-- CarLife 通道 -->
-    <string name="carlife_channel_title">CarLife 通道</string>
+    <string name="carlife_channel_title">Limo</string>
     <string name="carlife_connecting">正在连接 CarLife…</string>
     <string name="carlife_projecting">CarLife 投屏中</string>
     <string name="carlife_disconnected">CarLife 已断开（%1$s）</string>
@@ -772,12 +772,14 @@
     <string name="log_exported">已导出到下载:%1$s</string>
     <string name="log_export_failed">暂无可导出的日志</string>
     <string name="settings_about">关于</string>
-    <string name="settings_version_row">版本 %1$s · CarLife 通道</string>
-    <string name="widget_navi_label">CarLife 助手</string>
+    <string name="settings_version_row">Limo v%1$s</string>
+    <string name="widget_navi_label">Limo</string>
     <string name="widget_wait_phone">等待手机接入…</string>
     <string name="widget_no_media">在手机上播放音乐</string>
     <string name="state_scan_hint">没反应?请确认手机已打开 CarLife,并换一根数据线(而非充电线)。</string>
     <string name="state_reconnect_hint">请查看手机屏幕上是否有投影确认提示。</string>
     <string name="ticker_about">关于 ›</string>
     <string name="about_credit">本应用为独立的 GPL-3.0 作品,界面与工程实现借鉴自 DiPlay / DiPlay-CN 项目(本代码衍生自其 CarPlay 宿主)。与百度无隶属关系;CarLife 为百度协议。</string>
+    <string name="update_view_page">查看发布页</string>
+    <string name="update_overwrite_note">注意:安装此上游版本会覆盖 Limo(与上游同为 com.shihab.diplay.cn 包名)。为自己的版本发版后,才能在应用内自更新。</string>
 </resources>

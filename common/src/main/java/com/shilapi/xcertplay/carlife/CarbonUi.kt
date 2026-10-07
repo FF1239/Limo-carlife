@@ -290,7 +290,7 @@ class GaugeView(context: Context, attrs: AttributeSet? = null) : View(context, a
         subPaint.textSize = dp(13f)
         canvas.drawText(
             when {
-                standby -> "CARLIFE · STANDBY"
+                standby -> "LIMO · STANDBY"
                 rpm < 0 -> "GEAR $gear · GPS"
                 else -> "GEAR $gear · RPM $rpm"
             },
@@ -390,7 +390,7 @@ class StandbyRingView(context: Context, attrs: AttributeSet? = null) : View(cont
     private var state = State.OFFLINE
     private var clock = "--:--"
     private var dateLine = ""
-    private var statusLine = "CARLIFE · STANDBY"
+    private var statusLine = "LIMO · STANDBY"
     private var phoneName = ""
 
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -417,9 +417,9 @@ class StandbyRingView(context: Context, attrs: AttributeSet? = null) : View(cont
         state = newState
         phoneName = phone
         statusLine = when (newState) {
-            State.OFFLINE -> "CARLIFE · STANDBY"
+            State.OFFLINE -> "LIMO · STANDBY"
             State.SEARCHING -> "SEARCHING PHONE…"
-            State.ONLINE -> if (phoneName.isBlank()) "CARLIFE · ONLINE" else phoneName.uppercase()
+            State.ONLINE -> if (phoneName.isBlank()) "LIMO · ONLINE" else phoneName.uppercase()
         }
         statusPaint.color = when (newState) {
             State.ONLINE -> CarbonTheme.ONLINE

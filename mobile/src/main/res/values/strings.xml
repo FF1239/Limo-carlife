@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">DiPlay CN</string>
+    <string name="app_name">Limo</string>
 
     <!-- Launcher-alias labels: the name shown in the car's app list. Fixed texts; Android
          cannot change an installed app's label to free text. -->
