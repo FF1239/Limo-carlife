@@ -222,9 +222,19 @@ object CarLife {
     const val PROTOCOL_VERSION_MAJOR = 1
     const val PROTOCOL_VERSION_MINOR = 0
 
-    /** Default video encoder parameters (CarLifeLibTest: 768x480@30). */
-    const val DEFAULT_VIDEO_WIDTH = 768
-    const val DEFAULT_VIDEO_HEIGHT = 480
+    /**
+     * Default video encoder parameters.
+     *
+     * The head unit announces the canvas it wants through VIDEO_ENCODER_INIT and
+     * the phone renders its own UI at that size, so the right value is the one
+     * whose aspect ratio matches the unit — not the largest one. Measured on a
+     * 19.5:9 head unit (observed live 2026-10-09): negotiating 1920x720 (8:3)
+     * makes the phone lay out a wide car UI whose icon rail and side panel fall
+     * outside the unit once it is scaled up to fill the screen, while 1280x720
+     * (16:9) fits the same layout edge to edge — nothing cropped, no letterbox.
+     */
+    const val DEFAULT_VIDEO_WIDTH = 1280
+    const val DEFAULT_VIDEO_HEIGHT = 720
     const val DEFAULT_VIDEO_FRAME_RATE = 30
 
     /** Fixed token the official HU demo sends as AuthenRequest.randomValue. */

@@ -29,6 +29,12 @@ class TcpChannelTransport(
         fun onConnected(channel: Int)
 
         fun onClosed(reason: String)
+
+        /**
+         * Non-fatal: a non-CMD channel failed and will be reconnected in-place
+         * after [delayMs]. The CMD session is unaffected.
+         */
+        fun onChannelRetried(channel: Int, reason: String, delayMs: Long) {}
     }
 
     private class Channel(
@@ -56,8 +62,27 @@ class TcpChannelTransport(
     @Volatile
     private var running = false
 
+    /**
+     * Outbound frame queue drained by a single writer thread. Touch and
+     * hard-key frames are sent from the UI thread — writing to a socket there
+     * throws NetworkOnMainThreadException (Android forbids main-thread network
+     * I/O), which silently killed every touch before this queue existed. A
+     * single writer also serializes per-channel output so frames from
+     * different threads can never interleave mid-frame.
+     */
+    private val writeQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+
     fun start() {
         running = true
+        Thread({
+            try {
+                while (running) {
+                    val frame = writeQueue.poll(500, java.util.concurrent.TimeUnit.MILLISECONDS) ?: continue
+                    routeWrite(frame)
+                }
+            } catch (_: InterruptedException) {
+            }
+        }, "carlife-tcp-writer").apply { start() }
         for (c in channels) {
             val t = Thread({ runChannel(c) }, "carlife-tcp-${c.id}").apply { start() }
             c.thread = t
@@ -66,6 +91,7 @@ class TcpChannelTransport(
 
     fun stop() {
         running = false
+        writeQueue.clear()
         for (c in channels) {
             c.open = false
             runCatching { c.socket?.close() }
@@ -76,23 +102,68 @@ class TcpChannelTransport(
     override val isConnected: Boolean get() = channels.firstOrNull { it.open } != null
 
     private fun runChannel(channel: Channel) {
+        var backoffMs = RETRY_BACKOFF_START_MS
+        var failures = 0
+        while (running) {
+            val failure = runConnection(channel)
+            if (!running) return
+            if (channel.id == CarLife.CHANNEL_CMD) {
+                // The CMD socket carries the framed session (handshake, encoder
+                // init, module status...): its loss is fatal and escalates to the
+                // engine-level full reconnect.
+                listener.onClosed("channel ${channel.id}: ${failure ?: "stream ended"}")
+                return
+            }
+            // Escalation policy: VIDEO and TOUCH are required for a usable
+            // projection, so after the quick in-place retries fail (the phone
+            // only listens on these ports around session establishment) they
+            // escalate to the full reconnect — the only path that reopens the
+            // ports. MUSIC/TTS/VR degrade gracefully instead: keep self-healing
+            // forever so audio recovers the moment the phone reopens its port
+            // (e.g. media starts playing) without ever tearing down video.
+            failures++
+            val mustHave = channel.id == CarLife.CHANNEL_VIDEO || channel.id == CarLife.CHANNEL_TOUCH
+            if (mustHave && failures > CHANNEL_SELFHEAL_ATTEMPTS) {
+                listener.onClosed(
+                    "channel ${channel.id}: self-heal failed ${CHANNEL_SELFHEAL_ATTEMPTS}x: ${failure ?: "stream ended"}",
+                )
+                return
+            }
+            listener.onChannelRetried(channel.id, failure ?: "stream ended", backoffMs)
+            try {
+                Thread.sleep(backoffMs)
+            } catch (_: InterruptedException) {
+                return
+            }
+            backoffMs = (backoffMs * 2).coerceAtMost(RETRY_BACKOFF_MAX_MS)
+        }
+    }
+
+    /** One connect+read lifetime. Returns the failure description, or null on clean EOF. */
+    private fun runConnection(channel: Channel): String? {
         try {
             val socket = Socket()
             socket.tcpNoDelay = true
             socket.soTimeout = 0
             socket.connect(InetSocketAddress(host, channel.port), CONNECT_TIMEOUT_MS)
+            // Match the working desktop client: a 1 MB kernel receive window keeps
+            // large H.264 I-frames (up to ~314 KB) from being dropped/desynced.
+            runCatching { socket.receiveBufferSize = 1024 * 1024 }
             channel.socket = socket
-            channel.input = BufferedInputStream(socket.getInputStream(), 64 * 1024)
-            channel.output = BufferedOutputStream(socket.getOutputStream(), 64 * 1024)
+            channel.input = BufferedInputStream(socket.getInputStream(), 128 * 1024)
+            channel.output = BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
             channel.open = true
             listener.onConnected(channel.id)
 
-            val buf = ByteArray(16 * 1024)
+            // Reusable read buffer. Must be >= the largest single CarLife frame
+            // (H.264 I-frames can reach ~314 KB at 720p). The desktop client uses
+            // 2 MB; mirror it so readFully never overruns the buffer on a big frame.
+            val buf = ByteArray(2 * 1024 * 1024)
             val input = channel.input!!
             while (running && channel.open) {
                 // Per-channel stream: one message header + payload at a time.
                 val head = readFully(input, buf, if (channel.id == CarLife.CHANNEL_CMD || channel.id == CarLife.CHANNEL_TOUCH) 8 else 12)
-                    ?: break
+                    ?: return null
                 val payloadLen = if (channel.id == CarLife.CHANNEL_CMD || channel.id == CarLife.CHANNEL_TOUCH) {
                     ((head[0].toInt() and 0xFF) shl 8) or (head[1].toInt() and 0xFF)
                 } else {
@@ -100,16 +171,20 @@ class TcpChannelTransport(
                         ((head[2].toInt() and 0xFF) shl 8) or (head[3].toInt() and 0xFF)
                 }
                 if (payloadLen < 0 || payloadLen > 8 * 1024 * 1024) throw java.io.IOException("bad payload len $payloadLen")
-                val body = if (payloadLen > 0) readFully(input, buf, payloadLen) ?: break else ByteArray(0)
+                val body = if (payloadLen > 0) readFully(input, buf, payloadLen) ?: return null else ByteArray(0)
                 // Re-frame with the CarLife transport header so the session splitter is transport-agnostic.
                 val frame = packForChannel(channel.id, head, body)
                 listener.onBytes(channel.id, frame, 0, frame.size)
             }
+            return null
         } catch (e: Exception) {
-            if (running) listener.onClosed("channel ${channel.id}: ${e.message}")
+            return if (running) "${e.javaClass.simpleName}: ${e.message}" else null
         } finally {
             channel.open = false
             runCatching { channel.socket?.close() }
+            channel.socket = null
+            channel.input = null
+            channel.output = null
         }
     }
 
@@ -128,6 +203,18 @@ class TcpChannelTransport(
     }
 
     private fun readFully(input: BufferedInputStream, buf: ByteArray, len: Int): ByteArray? {
+        // Guard against frames larger than the reusable buffer (defensive; the
+        // 2 MB buffer already covers normal CarLife frames, but never overrun it).
+        if (len > buf.size) {
+            val big = ByteArray(len)
+            var off = 0
+            while (off < len) {
+                val n = input.read(big, off, len - off)
+                if (n < 0) return null
+                off += n
+            }
+            return big
+        }
         var off = 0
         while (off < len) {
             val n = input.read(buf, off, len - off)
@@ -137,18 +224,41 @@ class TcpChannelTransport(
         return if (len == buf.size) buf else buf.copyOf(len)
     }
 
-    /** Sends a full CarLife frame on the matching channel socket (strips transport header). */
+    /** Enqueues a full CarLife frame; the writer thread delivers it to the channel socket. */
     override fun write(frame: ByteArray) {
+        writeQueue.put(frame)
+    }
+
+    /** Runs on the writer thread only: routes one frame to its channel socket. */
+    private fun routeWrite(frame: ByteArray) {
         if (frame.size < 8) return
         val channel = ((frame[0].toInt() and 0xFF) shl 24) or ((frame[1].toInt() and 0xFF) shl 16) or
             ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
         val c = channels.firstOrNull { it.id == channel } ?: return
-        val out = c.output ?: return
+        val out = c.output ?: run {
+            // Silent drops here are how touch/hardkey input "dies" invisibly:
+            // log (throttled) so a dead channel is visible in the session log.
+            val now = System.currentTimeMillis()
+            if (now - lastDropLogAt > 1000) {
+                lastDropLogAt = now
+                android.util.Log.w("CarLifeLog", "write dropped: channel $channel not open (${frame.size}B)")
+            }
+            return
+        }
         try {
             out.write(frame, 8, frame.size - 8)
             out.flush()
+            if (channel == CarLife.CHANNEL_TOUCH) {
+                // Throttled proof-of-life: touch frames flow to the socket.
+                val now = System.currentTimeMillis()
+                if (now - lastTouchOkLogAt > 1000) {
+                    lastTouchOkLogAt = now
+                    android.util.Log.i("CarLifeLog", "touch write ok ${frame.size - 8}B")
+                }
+            }
         } catch (e: Exception) {
             // write failures surface via the channel read loop's onClosed
+            android.util.Log.w("CarLifeLog", "write failed ch=$channel: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -158,5 +268,13 @@ class TcpChannelTransport(
 
     companion object {
         private const val CONNECT_TIMEOUT_MS = 10_000
+        private const val RETRY_BACKOFF_START_MS = 1_000L
+        private const val RETRY_BACKOFF_MAX_MS = 5_000L
+
+        /** In-place retries per non-CMD channel before escalating to a full reconnect. */
+        private const val CHANNEL_SELFHEAL_ATTEMPTS = 2
+
+        private var lastDropLogAt = 0L
+        private var lastTouchOkLogAt = 0L
     }
 }

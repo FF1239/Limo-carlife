@@ -24,6 +24,10 @@ class CarLifeEngine(
     private val context: Context,
     private val surface: Surface?,
     private val uiListener: UiListener,
+    /** When set, the head unit negotiates exactly this canvas instead of the
+     *  persisted preset — used to match the unit's own panel size so the
+     *  projection maps 1:1 with no cropping and no letterbox. */
+    private val encoderSizeOverride: Pair<Int, Int>? = null,
 ) : AoaTransport.Listener, CarLifeSession.Listener {
     interface UiListener {
         fun onEngineState(state: String, detail: String? = null)
@@ -54,6 +58,14 @@ class CarLifeEngine(
     private var tcp: TcpChannelTransport? = null
     private var session: CarLifeSession? = null    // ---- video ----
     private var codec: MediaCodec? = null
+
+    /**
+     * Guards [codec] across threads: video data arrives on the session reader
+     * thread while release/setup run on session lifecycle paths. Without this
+     * lock a concurrent release left feedDecoder holding a released codec and
+     * dequeueInputBuffer threw IllegalStateException, killing the stream.
+     */
+    private val codecLock = Any()
     private var decoderWidth = CarLife.DEFAULT_VIDEO_WIDTH
     private var decoderHeight = CarLife.DEFAULT_VIDEO_HEIGHT
 
@@ -80,6 +92,9 @@ class CarLifeEngine(
     @Volatile
     private var reconnectAttempt = 0
 
+    /** Throttle for the TOUCH diagnostic log (1 line/sec max). */
+    private var lastTouchLogAt = 0L
+
     /** Guards against the six per-channel onClosed calls stacking reconnects. */
     @Volatile
     private var reconnectScheduled = false
@@ -91,7 +106,13 @@ class CarLifeEngine(
         start(Mode.WIRED)
     }
 
-    fun start(newMode: Mode, wirelessHost: java.net.InetAddress? = null) {
+    /** Whether the phone-side canvas follows the user's resolution pick (true)
+     *  or the default 1280x720 whitelist size (false). */
+    @Volatile
+    private var panelSizeRequested = false
+
+    fun start(newMode: Mode, wirelessHost: java.net.InetAddress? = null, usePanelSize: Boolean = false) {
+        panelSizeRequested = usePanelSize
         if (running) return
         running = true
         CarLifeSessionLog.newSession(context)
@@ -128,6 +149,13 @@ class CarLifeEngine(
     }
 
     fun stop() {
+        // Diagnostic: identify unexpected stop() callers (a second activity
+        // instance or a late scan callback tearing down a live session showed
+        // up live as "engine stopped" mid-streaming).
+        CarLifeSessionLog.log(
+            context, "ENGINE",
+            "stop() from " + Exception().stackTrace.take(4).joinToString(" <- ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" },
+        )
         userStopped = true
         watchdog.removeCallbacksAndMessages(null)
         reconnectHandler.removeCallbacksAndMessages(null)
@@ -173,11 +201,23 @@ class CarLifeEngine(
                 emitState("disconnected", reason)
             }
         }
+
+        override fun onChannelRetried(channel: Int, reason: String, delayMs: Long) {
+            // A single audio/video socket reset healed in place; keep it in the
+            // session log for diagnostics without touching engine state.
+            CarLifeSessionLog.log(context, "ENGINE", "channel $channel retry in ${delayMs}ms ($reason)")
+        }
     }
 
     // ---- touch / hard keys ----
 
     fun sendTouch(action: Int, x: Int, y: Int) {
+        // Throttled diagnostic: proves touch frames flow (or not) during a test.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastTouchLogAt > 1000) {
+            lastTouchLogAt = now
+            CarLifeSessionLog.log(context, "TOUCH", "action=$action $x,$y")
+        }
         session?.sendTouchAction(action, x, y)
     }
 
@@ -342,7 +382,12 @@ class CarLifeEngine(
         session?.sendFeatureConfigResponse(
             listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
         )
-        session?.sendVideoEncoderInit(p.videoWidth(), p.videoHeight(), p.videoFrameRate())
+        if (panelSizeRequested) {
+            session?.sendVideoEncoderInit(p.videoWidth(), p.videoHeight(), p.videoFrameRate())
+        } else {
+            // 1280x720: whitelist size, renders the full car UI uncropped.
+            session?.sendVideoEncoderInit(1280, 720, p.videoFrameRate())
+        }
         // Subscribe to the phone's GNSS module (0 = GPS, flag 1 = GCJ-02): the
         // phone then streams CAR_GPS, giving the instruments a real speed.
         session?.sendCarDataSubscribe(listOf(CarLifeMessages.VehicleInfo(MODULE_GPS_DATA, 1, 0)))
@@ -392,8 +437,18 @@ class CarLifeEngine(
     }
 
     override fun onMusicData(pcm: ByteArray) {
+        lastMusicDataAt = System.currentTimeMillis()
         writePcm(musicTrack, pcm)
     }
+
+    private var lastMusicDataAt = 0L
+
+    /**
+     * True while music audio frames are still flowing. The phone sends no
+     * MEDIA_PROGRESS_BAR on this build, so audio flow is the only reliable
+     * play-state signal — and it is authoritative.
+     */
+    fun isMusicFlowing(): Boolean = System.currentTimeMillis() - lastMusicDataAt < 2500
 
     override fun onTtsInit(init: CarLifeMessages.AudioInit) {
         ttsTrack = rebuildTrack(ttsTrack, init, AudioManager.STREAM_MUSIC)
@@ -426,6 +481,7 @@ class CarLifeEngine(
 
     override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
         lastMediaInfo = info
+        Log.i("CarLifeLog", "MEDIA: song=${info.song} artist=${info.artist} dur=${info.duration} src=${info.source.take(20)}")
         CarLifeNaviWidget.updateMedia(
             context, info.song.ifBlank { "" }, info.artist.ifBlank { "" },
         )
@@ -433,8 +489,11 @@ class CarLifeEngine(
     }
 
     override fun onMediaProgress(percent: Int) {
-        lastProgressPct = percent
-        uiListener.onMediaProgress(percent)
+        // Observed live: the phone sends a 0..10000 scale (7040 == 70.4%).
+        val pct = (percent / 100).coerceIn(0, 100)
+        Log.i("CarLifeLog", "MEDIA: progress raw=$percent -> $pct")
+        lastProgressPct = pct
+        uiListener.onMediaProgress(pct)
     }
 
     // ---- media play-state mirror (session publish unavailable: stripped jar) ----
@@ -473,15 +532,24 @@ class CarLifeEngine(
         stopMic()
         releaseVideo()
         releaseAudio()
+        // Session-level closes (watchdog trip, phone-side session teardown)
+        // previously never reconnected: the engine went permanently silent
+        // until a manual reconnect. Re-arm the loop like transport-level
+        // closes do; stop() (userStopped) still wins.
+        if (running && !userStopped) {
+            scheduleReconnect(reason)
+        }
         emitState("disconnected", reason)
     }
 
     override fun onRsaPublicKeyRequest() {
-        // Matching the open demo default: pre-shared AES key, no real RSA.
-        session?.sendRsaPublicKey("")
+        // Real RSA/AES handshake is now driven inside CarLifeSession via
+        // CarLifeCrypto; the engine no longer sends the placeholder public key.
     }
 
-    override fun onAesKeyDelivered(encryptedKey: String) = Unit
+    override fun onAesKeyDelivered(encryptedKey: String) {
+        // The AES session key is owned by CarLifeSession now; nothing to do here.
+    }
 
     // ---- video decoder ----
 
@@ -509,7 +577,7 @@ class CarLifeEngine(
                     runCatching { c.release() }
                     throw e
                 }
-                codec = c
+                synchronized(codecLock) { codec = c }
                 if (w != decoderWidth || h != decoderHeight) {
                     Log.w(TAG, "decoder fallback ${decoderWidth}x${decoderHeight} -> ${w}x${h}")
                     decoderWidth = w
@@ -525,7 +593,9 @@ class CarLifeEngine(
     }
 
     private fun feedDecoder(h264: ByteArray, ptsUs: Long) {
-        val c = codec ?: return
+        // Snapshot the codec under the lock: a concurrent releaseVideo() must
+        // not leave us operating on a released MediaCodec.
+        val c = synchronized(codecLock) { codec } ?: return
         try {
             val index = c.dequeueInputBuffer(DEQUEUE_TIMEOUT_US)
             if (index >= 0) {
@@ -547,11 +617,15 @@ class CarLifeEngine(
     }
 
     private fun releaseVideo() {
-        runCatching {
-            codec?.stop()
-            codec?.release()
-        }
-        codec = null
+        // Take ownership under the lock, then release outside it: feedDecoder
+        // can never see a codec that is being stopped/released concurrently.
+        val old = synchronized(codecLock) {
+            val c = codec
+            codec = null
+            c
+        } ?: return
+        runCatching { old.stop() }
+        runCatching { old.release() }
     }
 
     // ---- audio ----

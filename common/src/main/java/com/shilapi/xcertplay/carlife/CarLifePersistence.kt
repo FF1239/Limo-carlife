@@ -10,7 +10,7 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
 
     // ---- video negotiation ----
 
-    fun videoWidth(): Int = prefs.getInt(KEY_VIDEO_W, 1920)
+    fun videoWidth(): Int = prefs.getInt(KEY_VIDEO_W, 1280)
 
     fun videoHeight(): Int = prefs.getInt(KEY_VIDEO_H, 720)
 
@@ -49,7 +49,10 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
 
     // ---- day / night ----
 
-    fun dayNightMode(): Int = prefs.getInt(KEY_DAY_NIGHT, DAY_NIGHT_SYSTEM)
+    /** Defaults to DAY: the phone's CarLife UI is light-themed, and the night
+     *  ColorMatrix only dims it into a muddy grey. Ambient auto-dim stays
+     *  available as an explicit setting. */
+    fun dayNightMode(): Int = prefs.getInt(KEY_DAY_NIGHT, DAY_NIGHT_DAY)
 
     fun saveDayNightMode(mode: Int) {
         prefs.edit().putInt(KEY_DAY_NIGHT, mode).apply()
@@ -80,8 +83,10 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
     /**
      * Simulated speed/gear when no real vehicle source exists (no CAN, no
      * GPS channel yet). Off = gauge stays at standby until a real source lands.
+     * Defaults to off: during a real projection session fake "DEMO" speed and
+     * simulated navigation must not overlay the live data (opt in via settings).
      */
-    fun demoData(): Boolean = prefs.getBoolean(KEY_DEMO_DATA, true)
+    fun demoData(): Boolean = prefs.getBoolean(KEY_DEMO_DATA, false)
 
     fun saveDemoData(v: Boolean) {
         prefs.edit().putBoolean(KEY_DEMO_DATA, v).apply()
@@ -151,12 +156,17 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         /** Resolution presets: width x height, landscape head-unit canvases
          *  plus portrait phone-shaped ones (phones mirror their own screen
          *  aspect; a 16:9 landscape canvas letterboxes a portrait phone). */
+        /**
+         * Resolution presets offered to the phone; the first entry is the
+         * measured default (16:9 matches a wide head unit with no cropping).
+         * 1920x720 stays available for units that prefer the wider canvas.
+         */
         val RESOLUTION_PRESETS = arrayOf(
-            intArrayOf(800, 480),
-            intArrayOf(1024, 600),
-            intArrayOf(1280, 480),
             intArrayOf(1280, 720),
             intArrayOf(1920, 720),
+            intArrayOf(1024, 600),
+            intArrayOf(800, 480),
+            intArrayOf(1280, 480),
             intArrayOf(720, 1280),
             intArrayOf(1080, 1920),
         )

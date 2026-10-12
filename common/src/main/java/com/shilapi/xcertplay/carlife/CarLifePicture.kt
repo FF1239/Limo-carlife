@@ -61,4 +61,37 @@ object CarLifePicture {
         CarLifePersistence.DAY_NIGHT_NIGHT -> true
         else -> systemNight
     }
+
+    /**
+     * Map pane paint. Inversion-based night filters were rejected after live
+     * testing: inverting a light-themed map flips its colour semantics (water,
+     * parks, road labels) and makes navigation unreadable. The dashboard keeps
+     * the map in its native colours with a mild desaturation only — a light
+     * map beside a dark rack is exactly how CarPlay Dashboard presents it.
+     */
+    fun darkMapPaint(settings: Settings): Paint {
+        val cm = baseMatrix(settings)
+        val sat = ColorMatrix().apply { setSaturation(0.85f) }
+        cm.postConcat(sat)
+        return Paint().apply { colorFilter = ColorMatrixColorFilter(cm) }
+    }
+
+    /** Brightness/contrast/saturation/warmth part of the chain, no night dim. */
+    private fun baseMatrix(settings: Settings): ColorMatrix {
+        val brightness = settings.brightness / 50f
+        val contrast = 1f + settings.contrast / 50f
+        val saturation = 1f + settings.saturation / 50f
+        val warmth = settings.warmth / 50f
+        val warmR = 1f + 0.12f * warmth
+        val warmB = 1f - 0.12f * warmth
+        val cm = ColorMatrix(floatArrayOf(
+            contrast * warmR, 0f, 0f, 0f, (brightness * 255f * 0.5f),
+            0f, contrast, 0f, 0f, (brightness * 255f * 0.5f),
+            0f, 0f, contrast * warmB, 0f, (brightness * 255f * 0.5f),
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        val sat = ColorMatrix().apply { setSaturation(saturation) }
+        cm.postConcat(sat)
+        return cm
+    }
 }

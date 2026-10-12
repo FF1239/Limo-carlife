@@ -15,4 +15,16 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowDisablePreview">true</item>
     </style>
+    <!-- AlertDialog themes for AppDialogs.kt. CarLife screens stay on the carbon
+         dark palette, so the dark variant carries the track-red accent. -->
+    <style name="Theme.Xcertplay.Dialog.Dark" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#E1062C</item>
+        <item name="android:windowBackground">#17191C</item>
+    </style>
+    <style name="Theme.Xcertplay.Dialog.Light" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#E1062C</item>
+        <item name="android:windowBackground">#F2F3F5</item>
+    </style>
 </resources>

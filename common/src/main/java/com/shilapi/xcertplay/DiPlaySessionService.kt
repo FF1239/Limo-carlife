@@ -27,7 +27,7 @@ class DiPlaySessionService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, CarPlayHostActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1, Intent(this, DiPlaySessionService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_diplay_notification)
+            .setSmallIcon(R.drawable.ic_limo_notif)
             .setContentTitle("DiPlay")
             .setContentText("CarPlay connection running")
             .setContentIntent(open).setOngoing(true)

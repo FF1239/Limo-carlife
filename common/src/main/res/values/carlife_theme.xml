@@ -9,6 +9,6 @@
     <style name="Theme.CarLifeLaunch" parent="Theme.Xcertplay">
         <item name="android:windowBackground">@color/carlife_bg</item>
         <item name="android:windowSplashScreenBackground">@color/carlife_bg</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_carlife_carbon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_limo_mark</item>
     </style>
 </resources>

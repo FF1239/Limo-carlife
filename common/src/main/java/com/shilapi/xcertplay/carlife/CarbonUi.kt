@@ -25,17 +25,17 @@ import kotlin.math.sin
 
 /** Shared carbon/track-red palette for the CarLife channel UI. */
 object CarbonTheme {
-    val BG = Color.parseColor("#0F1114")
-    val PANEL = Color.parseColor("#17191C")
-    val PANEL_DEEP = Color.parseColor("#0C0D0F")
-    val HAIRLINE = Color.parseColor("#2A2E33")
+    val BG = Color.parseColor("#0B0B0C")
+    val PANEL = Color.parseColor("#1A1A1D")
+    val PANEL_DEEP = Color.parseColor("#101011")
+    val HAIRLINE = Color.parseColor("#26262A")
 
     /** Mutable accent — every screen calls [load] before building views. */
     var RED = Color.parseColor("#E1062C")
 
-    val TEXT = Color.parseColor("#E8EAEE")
-    val TEXT_DIM = Color.parseColor("#9AA0A8")
-    val TEXT_FAINT = Color.parseColor("#585F68")
+    val TEXT = Color.parseColor("#EDEDEA")
+    val TEXT_DIM = Color.parseColor("#8A8983")
+    val TEXT_FAINT = Color.parseColor("#55544F")
     val ONLINE = Color.parseColor("#2EE06C")
 
     fun load(context: Context) {
@@ -46,10 +46,10 @@ object CarbonTheme {
         }
     }
 
+    /** v16 soft card: no stroke, 16dp radius, lifted by fill difference only. */
     fun hairlinePanel(context: Context): android.graphics.drawable.GradientDrawable =
         android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = 0f
-            setStroke((1 * context.resources.displayMetrics.density).toInt(), HAIRLINE)
+            cornerRadius = 16f * context.resources.displayMetrics.density
             setColor(PANEL)
         }
 }

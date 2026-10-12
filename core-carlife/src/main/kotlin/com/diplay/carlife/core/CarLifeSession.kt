@@ -1,5 +1,7 @@
 package com.diplay.carlife.core
 
+import java.security.PrivateKey
+
 /**
  * CarLife HU-side session: drives the 7-phase handshake and dispatches decoded
  * traffic to a listener.
@@ -102,6 +104,13 @@ class CarLifeSession(
     @Volatile
     var cmdLogger: ((serviceType: Int, payloadLen: Int) -> Unit)? = null
 
+    /** RSA private key for the active session, set on MD_RSA_PUBLIC_KEY_REQUEST. */
+    private var rsaPrivateKey: PrivateKey? = null
+
+    /** AES-128 session key (raw bytes) established after MD_AES_KEY_SEND_REQUEST. */
+    @Volatile
+    private var aesKey: ByteArray? = null
+
     // ---- Send side ----
 
     fun startHandshake() {
@@ -190,7 +199,7 @@ class CarLifeSession(
     /** VR uplink audio (1KB per packet in the reference implementation). */
     fun sendVrData(pcm: ByteArray, timestamp: Long = 0) {
         transport.write(
-            CarLifeFrame.pack(CarLife.CHANNEL_VR, CarLife.Stream.VR_DATA.toLong(), pcm, timestamp),
+            CarLifeFrame.pack(CarLife.CHANNEL_VR, CarLife.Stream.VR_DATA.toLong(), seal(pcm), timestamp),
         )
     }
 
@@ -199,7 +208,7 @@ class CarLifeSession(
             CarLifeFrame.pack(
                 CarLife.CHANNEL_TOUCH,
                 CarLife.Stream.TOUCH_ACTION.toLong(),
-                CarLifeMessages.TouchAction(action, x, y).encode(),
+                seal(CarLifeMessages.TouchAction(action, x, y).encode()),
             ),
         )
     }
@@ -209,7 +218,7 @@ class CarLifeSession(
             CarLifeFrame.pack(
                 CarLife.CHANNEL_TOUCH,
                 CarLife.Stream.TOUCH_CAR_HARD_KEY_CODE.toLong(),
-                CarLifeMessages.HardKeyCode(keycode).encode(),
+                seal(CarLifeMessages.HardKeyCode(keycode).encode()),
             ),
         )
     }
@@ -218,6 +227,37 @@ class CarLifeSession(
     fun sendRsaPublicKey(base64PublicKey: String) {
         sendCmd(CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST, CarLifeMessages.RsaPublicKey(base64PublicKey).encode())
     }
+
+    // ---- RSA/AES session crypto (real CarLife path) ----
+
+    private fun handleRsaPublicKeyRequest() {
+        val (pub, priv) = CarLifeCrypto.ensureKeyPair()
+        rsaPrivateKey = priv
+        sendRsaPublicKey(pub)
+    }
+
+    private fun handleAesKeyDelivered(encryptedKey: String) {
+        val priv = rsaPrivateKey ?: run {
+            println("CarLifeSession: AES key delivered but no RSA private key held")
+            return
+        }
+        val key = CarLifeCrypto.rsaDecryptToBytes(priv, encryptedKey)
+        if (key == null) {
+            println("CarLifeSession: AES session key RSA decrypt failed")
+            return
+        }
+        aesKey = key
+        println("CarLifeSession: AES session key established (${key.size} bytes)")
+    }
+
+    /** Encrypt an outbound payload once the AES session key exists. */
+    private fun seal(payload: ByteArray): ByteArray =
+        aesKey?.let { CarLifeCrypto.aesEncrypt(it, payload) } ?: payload
+
+    /** Decrypt an inbound payload; falls back to the original on any failure
+     *  (e.g. a channel the phone left unencrypted). */
+    private fun unseal(payload: ByteArray): ByteArray =
+        aesKey?.let { CarLifeCrypto.aesDecrypt(it, payload) } ?: payload
 
     /**
      * Subscribes to the phone's car-data modules (0 = GPS). The phone answers
@@ -263,23 +303,26 @@ class CarLifeSession(
     }
 
     private fun dispatch(f: CarLifeFrame.Parsed) {
+        // Once the AES session key is established the phone encrypts every
+        // inbound message payload; transparently decrypt before dispatch.
+        val p = unseal(f.payload)
         when (f.channel) {
-            CarLife.CHANNEL_CMD -> dispatchCmd(f.serviceType, f.payload)
+            CarLife.CHANNEL_CMD -> dispatchCmd(f.serviceType, p)
             CarLife.CHANNEL_VIDEO -> when (f.serviceType.toInt()) {
-                CarLife.Stream.VIDEO_DATA -> listener.onVideoData(f.timestamp, f.payload)
+                CarLife.Stream.VIDEO_DATA -> listener.onVideoData(f.timestamp, p)
                 CarLife.Stream.VIDEO_HEARTBEAT -> listener.onVideoHeartbeat()
             }
             CarLife.CHANNEL_MUSIC -> when (f.serviceType.toInt()) {
-                CarLife.Stream.MEDIA_INIT -> listener.onMusicInit(CarLifeMessages.AudioInit.decode(f.payload))
-                CarLife.Stream.MEDIA_DATA -> listener.onMusicData(f.payload)
+                CarLife.Stream.MEDIA_INIT -> listener.onMusicInit(CarLifeMessages.AudioInit.decode(p))
+                CarLife.Stream.MEDIA_DATA -> listener.onMusicData(p)
             }
             CarLife.CHANNEL_TTS -> when (f.serviceType.toInt()) {
-                CarLife.Stream.NAVI_TTS_INIT -> listener.onTtsInit(CarLifeMessages.AudioInit.decode(f.payload))
-                CarLife.Stream.NAVI_TTS_DATA -> listener.onTtsData(f.payload)
+                CarLife.Stream.NAVI_TTS_INIT -> listener.onTtsInit(CarLifeMessages.AudioInit.decode(p))
+                CarLife.Stream.NAVI_TTS_DATA -> listener.onTtsData(p)
             }
             CarLife.CHANNEL_VR -> when (f.serviceType.toInt()) {
-                CarLife.Stream.VR_AUDIO_INIT -> listener.onVrInit(CarLifeMessages.AudioInit.decode(f.payload))
-                CarLife.Stream.VR_AUDIO_DATA -> listener.onVrData(f.payload)
+                CarLife.Stream.VR_AUDIO_INIT -> listener.onVrInit(CarLifeMessages.AudioInit.decode(p))
+                CarLife.Stream.VR_AUDIO_DATA -> listener.onVrData(p)
             }
             else -> Unit // TOUCH carries no mobile->HU traffic we care about
         }
@@ -316,11 +359,14 @@ class CarLifeSession(
                 listener.onNaviNextTurnInfo(CarLifeMessages.NaviNextTurnInfo.decode(payload))
             CarLife.Cmd.ERROR_CODE -> listener.onErrorCode(CarLifeMessages.ErrorCode.decode(payload))
             CarLife.Cmd.BACKGROUND -> listener.onBackground()
+            // One-way phone notifications (no payload, no reply expected);
+            // recognizing them keeps the log free of misleading UNKNOWN_CMD.
+            CarLife.Cmd.SCREEN_ON, CarLife.Cmd.FOREGROUND -> Unit
             CarLife.Cmd.MIC_RECORD_WAKEUP_START, CarLife.Cmd.MIC_RECORD_RECOG_START ->
                 listener.onMicRecordStart()
             CarLife.Cmd.MIC_RECORD_END -> listener.onMicRecordEnd()
-            CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> listener.onRsaPublicKeyRequest()
-            CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> listener.onAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
+            CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> handleRsaPublicKeyRequest()
+            CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> handleAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
             CarLife.Cmd.CAR_GPS -> listener.onCarGps(CarLifeMessages.CarGps.decode(payload))
             CarLife.Cmd.CAR_VELOCITY -> listener.onCarVelocity(CarLifeMessages.CarSpeed.decode(payload))
             else -> listener.onUnknownCmd(serviceType.toInt(), payload.size)
@@ -328,6 +374,6 @@ class CarLifeSession(
     }
 
     private fun sendCmd(serviceType: Int, payload: ByteArray) {
-        transport.write(CarLifeFrame.pack(CarLife.CHANNEL_CMD, serviceType.toLong(), payload))
+        transport.write(CarLifeFrame.pack(CarLife.CHANNEL_CMD, serviceType.toLong(), seal(payload)))
     }
 }
