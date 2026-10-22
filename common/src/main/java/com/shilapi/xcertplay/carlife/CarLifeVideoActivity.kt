@@ -1625,8 +1625,13 @@ class CarLifeVideoActivity : Activity() {
      * flicking between two different values.
      */
     private fun renderSpeed() {
-        val useUnit = unitKmh >= 0 && (unitGpsAt >= lastGpsAt || phoneKmh < 0)
-        val kmh = if (useUnit) unitKmh else phoneKmh
+        val kmh = when (CarLifePersistence.get(this).speedSource()) {
+            CarLifePersistence.SPEED_SOURCE_UNIT_GPS -> unitKmh
+            CarLifePersistence.SPEED_SOURCE_PHONE_GPS -> phoneKmh
+            // Automatic: publish whichever feed updated last so the readout
+            // cannot flick between two different values.
+            else -> if (unitKmh >= 0 && (unitGpsAt >= lastGpsAt || phoneKmh < 0)) unitKmh else phoneKmh
+        }
         statusSpeed.text = if (kmh >= 0) "$kmh km/h" else "-- km/h"
         statusGear.text = when {
             kmh < 0 -> "--"
@@ -1858,16 +1863,22 @@ class CarLifeVideoActivity : Activity() {
 
                 override fun onNaviInfo(info: CarLifeMessages.NaviNextTurnInfo) {
                     main.post {
+                        val prefs = CarLifePersistence.get(this@CarLifeVideoActivity)
                         if (info.roadName.isBlank() && info.remainDistance <= 0) {
                             naviActive = false
+                            if (prefs.naviDuckMusic()) engine?.duckForNavi(false)
                             refreshNaviPill()
                             return@post
                         }
                         val starting = !naviActive
                         naviActive = true
+                        if (starting && prefs.naviDuckMusic()) engine?.duckForNavi(true)
                         // CarPlay behaviour: when guidance starts, the map takes
-                        // the whole screen automatically.
-                        if (starting && screenMode == MODE_DASH) applyScreenMode(MODE_MAP)
+                        // the whole screen automatically — unless the driver
+                        // turned that off in navigation settings.
+                        if (starting && screenMode == MODE_DASH && prefs.naviAutoMap()) {
+                            applyScreenMode(MODE_MAP)
+                        }
                         stripDist.text =
                             if (info.remainDistance > 0) "${info.remainDistance}米" else ""
                         stripRoad.text = info.roadName

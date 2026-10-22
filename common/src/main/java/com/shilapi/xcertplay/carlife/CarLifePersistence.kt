@@ -106,6 +106,11 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         prefs.edit().putString(KEY_LAST_PHONE, v).apply()
     }
 
+    /** Drop the remembered phone so the next session re-detects it. */
+    fun clearLastPhone() {
+        prefs.edit().remove(KEY_LAST_PHONE).apply()
+    }
+
     /** Turn-card overlay position in percent of the free area (0..100). */
     fun turnCardX(): Int = prefs.getInt(KEY_TURN_X, 4)
 
@@ -120,6 +125,27 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
 
     fun saveTtsVolume(v: Int) {
         prefs.edit().putInt(KEY_TTS_VOLUME, v.coerceIn(0, 100)).apply()
+    }
+
+    /** CarPlay behaviour: when guidance starts the map takes the whole screen. */
+    fun naviAutoMap(): Boolean = prefs.getBoolean(KEY_NAVI_AUTO_MAP, true)
+
+    fun saveNaviAutoMap(v: Boolean) {
+        prefs.edit().putBoolean(KEY_NAVI_AUTO_MAP, v).apply()
+    }
+
+    /** Duck the music track while the phone is speaking a turn prompt. */
+    fun naviDuckMusic(): Boolean = prefs.getBoolean(KEY_NAVI_DUCK, true)
+
+    fun saveNaviDuckMusic(v: Boolean) {
+        prefs.edit().putBoolean(KEY_NAVI_DUCK, v).apply()
+    }
+
+    /** Which feed drives the cluster speed readout when both are live. */
+    fun speedSource(): Int = prefs.getInt(KEY_SPEED_SOURCE, SPEED_SOURCE_AUTO)
+
+    fun saveSpeedSource(v: Int) {
+        prefs.edit().putInt(KEY_SPEED_SOURCE, v).apply()
     }
 
     companion object {
@@ -144,10 +170,17 @@ class CarLifePersistence private constructor(private val prefs: SharedPreference
         private const val KEY_TTS_VOLUME = "tts_volume"
         private const val KEY_TURN_X = "turn_card_x"
         private const val KEY_TURN_Y = "turn_card_y"
+        private const val KEY_NAVI_AUTO_MAP = "navi_auto_map"
+        private const val KEY_NAVI_DUCK = "navi_duck_music"
+        private const val KEY_SPEED_SOURCE = "speed_source"
 
         const val DAY_NIGHT_SYSTEM = 0
         const val DAY_NIGHT_DAY = 1
         const val DAY_NIGHT_NIGHT = 2
+
+        const val SPEED_SOURCE_AUTO = 0
+        const val SPEED_SOURCE_UNIT_GPS = 1
+        const val SPEED_SOURCE_PHONE_GPS = 2
 
         const val ACCENT_RED = "red"
         const val ACCENT_BLUE = "blue"

@@ -34,6 +34,7 @@ import com.shilapi.xcertplay.InterfaceSize
 import com.shilapi.xcertplay.SettingsLayoutPolicy
 import com.shilapi.xcertplay.SettingsLayoutPreferences
 import com.shilapi.xcertplay.SettingsReadiness
+import android.widget.Toast
 import com.shilapi.xcertplay.appDialogBuilder
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.settings.SettingsTheme
@@ -1055,6 +1056,18 @@ abstract class CarLifeScreenActivity : Activity(), AppAppearanceOwner {
                     persistence.saveTtsVolume(it)
                 },
             )
+            toggle(
+                card,
+                getString(R.string.carlife_settings_navi_auto_map),
+                getString(R.string.carlife_settings_navi_auto_map_hint),
+                persistence.naviAutoMap(),
+            ) { persistence.saveNaviAutoMap(it) }
+            toggle(
+                card,
+                getString(R.string.carlife_settings_navi_duck),
+                getString(R.string.carlife_settings_navi_duck_hint),
+                persistence.naviDuckMusic(),
+            ) { persistence.saveNaviDuckMusic(it) }
         }
     }
 
@@ -1064,6 +1077,19 @@ abstract class CarLifeScreenActivity : Activity(), AppAppearanceOwner {
             getString(R.string.carlife_settings_vehicle),
             getString(R.string.carlife_settings_vehicle_summary),
         )
+        section(content, getString(R.string.carlife_settings_speed_source)) { card ->
+            choice(
+                card,
+                getString(R.string.carlife_settings_speed_source),
+                listOf(
+                    CarLifePersistence.SPEED_SOURCE_AUTO to getString(R.string.carlife_settings_speed_source_auto),
+                    CarLifePersistence.SPEED_SOURCE_UNIT_GPS to getString(R.string.carlife_settings_speed_source_unit),
+                    CarLifePersistence.SPEED_SOURCE_PHONE_GPS to getString(R.string.carlife_settings_speed_source_phone),
+                ),
+                persistence.speedSource(),
+            ) { persistence.saveSpeedSource(it) }
+            card.addView(label(getString(R.string.carlife_settings_speed_source_hint), 15, palette.secondaryText))
+        }
         section(content, getString(R.string.carlife_channel_title)) { card ->
             toggle(
                 card,
@@ -1071,12 +1097,6 @@ abstract class CarLifeScreenActivity : Activity(), AppAppearanceOwner {
                 getString(R.string.settings_demo_data),
                 persistence.demoData(),
             ) { persistence.saveDemoData(it) }
-            toggle(
-                card,
-                getString(R.string.settings_mic),
-                getString(R.string.settings_mic),
-                persistence.micUplink(),
-            ) { persistence.saveMicUplink(it) }
         }
     }
 
@@ -1153,12 +1173,13 @@ abstract class CarLifeScreenActivity : Activity(), AppAppearanceOwner {
         // handshake: the phone appears on the channel once the transport is up.
         section(content, getString(R.string.carlife_setup_phone_title)) { card ->
             card.addView(label(getString(R.string.carlife_setup_phone_description), 16, palette.secondaryText))
+            val rememberedPhone = persistence.lastPhone()
             card.addView(
                 button(
                     getString(R.string.carlife_choose_phone_prefix) +
-                        (persistence.lastPhone() ?: getString(R.string.carlife_setup_phone_none)),
+                        (rememberedPhone ?: getString(R.string.carlife_setup_phone_none)),
                     false,
-                ) { openProjection(wired = null) },
+                ) { onChoosePhoneTapped(rememberedPhone) },
                 matchButton(12, 60),
             )
             card.addView(
@@ -1166,6 +1187,41 @@ abstract class CarLifeScreenActivity : Activity(), AppAppearanceOwner {
                 matchButton(12, 60),
             )
         }
+    }
+
+    /**
+     * CarLife has no pairing list to pick from — the phone announces its model
+     * on the channel and that is the only identity we get. So the row either
+     * starts a projection (nothing remembered yet) or manages the remembered
+     * phone instead of silently starting another one.
+     */
+    private fun onChoosePhoneTapped(rememberedPhone: String?) {
+        if (rememberedPhone == null) {
+            openProjection(wired = null)
+            return
+        }
+        appDialogBuilder()
+            .setTitle(rememberedPhone)
+            .setItems(
+                arrayOf(
+                    getString(R.string.carlife_choose_phone_forget),
+                    getString(R.string.carlife_setup_phone_permissions),
+                ),
+            ) { _, which ->
+                if (which == 0) {
+                    persistence.clearLastPhone()
+                    Toast.makeText(
+                        this,
+                        getString(R.string.carlife_choose_phone_forgotten),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    render()
+                } else {
+                    openAppSettings()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun transportControls(parent: LinearLayout) {

@@ -432,8 +432,25 @@ class CarLifeEngine(
 
     override fun onVideoHeartbeat() = Unit
 
+    /** Music gain while the phone is speaking a turn prompt (0..1). */
+    private val naviDuckGain = 0.35f
+
+    /** Set while guidance is active and the user asked for prompt ducking. */
+    @Volatile
+    private var naviDuckActive = false
+
+    /**
+     * Duck the music track while the phone is speaking turn prompts. The TTS
+     * track keeps its own gain so the prompt itself stays audible.
+     */
+    fun duckForNavi(active: Boolean) {
+        naviDuckActive = active
+        runCatching { musicTrack?.setVolume(if (active) naviDuckGain else 1f) }
+    }
+
     override fun onMusicInit(init: CarLifeMessages.AudioInit) {
         musicTrack = rebuildTrack(musicTrack, init, AudioManager.STREAM_MUSIC)
+        if (naviDuckActive) runCatching { musicTrack?.setVolume(naviDuckGain) }
     }
 
     override fun onMusicData(pcm: ByteArray) {
@@ -688,7 +705,9 @@ class CarLifeEngine(
 
     /** Volume for the media/TTS tracks, honouring the TTS preference on restore. */
     private fun setMediaVolume(volume: Float) {
-        musicTrack?.let { runCatching { it.setVolume(volume) } }
+        musicTrack?.let {
+            runCatching { it.setVolume(if (naviDuckActive) minOf(volume, naviDuckGain) else volume) }
+        }
         ttsTrack?.let {
             val gain = if (volume >= 1f) (CarLifePersistence.get(context).ttsVolume() / 100f).coerceIn(0f, 1f) else volume
             runCatching { it.setVolume(gain) }
