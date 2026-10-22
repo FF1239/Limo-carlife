@@ -119,8 +119,6 @@ class CarLifeVideoActivity : Activity() {
     // ---- media state (stream-rendered; only the play-state mirror lives here) ----
     private var mediaPlaying = false
     private var lastMediaKey = ""
-    private var lastProgressPct = -1
-    private var lastProgressChangeAt = 0L
     private var mapAutoLaunched = false
     private var screenMode = MODE_DASH
     private var pinchActive = false
@@ -137,7 +135,6 @@ class CarLifeVideoActivity : Activity() {
     private var lyricLines: List<Pair<Long, String>> = emptyList()
     private var lyricKey = ""
     private var lyricIdx = -1
-    private var lyricLoading = false
     private var localPlaySec = 0
     private var btConnected = false
     private var phoneLabel = ""
@@ -168,8 +165,10 @@ class CarLifeVideoActivity : Activity() {
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            // Reserved for a battery chip readout; the status bar stays
-            // time/speed/gear only for now.
+            val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level < 0 || scale <= 0) return
+            statusBt?.text = "${level * 100 / scale}%"
         }
     }
 
@@ -213,7 +212,7 @@ class CarLifeVideoActivity : Activity() {
             val source = UnitGpsSpeedSource(this) { kmh ->
                 unitKmh = kmh
                 unitGpsAt = System.currentTimeMillis()
-                main.post { renderSpeed(unitKmh, "GPS") }
+                main.post { renderSpeed() }
             }
             if (source.start()) unitGps = source
         }
@@ -302,6 +301,14 @@ class CarLifeVideoActivity : Activity() {
             text = "在线"
         }
         bar.addView(statusLink)
+        bar.addView(space(8))
+        statusBt = TextView(this).apply {
+            text = "--"
+            setTextColor(0xFF55544F.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = Typeface.MONOSPACE
+        }
+        bar.addView(statusBt)
         bar.addView(View(this).also { it.layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
         statusSpeed = TextView(this).apply {
             text = "0 km/h"
@@ -679,9 +686,6 @@ class CarLifeVideoActivity : Activity() {
         })
         slimBar.addView(space(12))
         val slimCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        mTitle.let {
-            // reuse dashboard title view is impossible (different parent); slim has its own label
-        }
         slimTitleView = TextView(this).apply {
             text = getString(R.string.widget_no_media)
             setTextColor(0xFF8A8983.toInt())
@@ -834,6 +838,9 @@ class CarLifeVideoActivity : Activity() {
         playerPanel.visibility = if (mode == MODE_MUSIC) View.VISIBLE else View.GONE
         if (mode == MODE_MAP) {
             slimBar.visibility = View.VISIBLE
+            // The hide animation only translates the bar, so a second entry
+            // into map mode has to reset it or the bar stays off-screen.
+            slimBar.translationY = 0f
             autoHideSlim()
         } else {
             slimBar.visibility = View.GONE
@@ -963,23 +970,6 @@ class CarLifeVideoActivity : Activity() {
             setOnClickListener { onClick() }
             layoutParams = LinearLayout.LayoutParams(w, h)
         }
-
-    /** Launch a natively installed car-map app (real navigation, no mirroring). */
-    private fun launchNativeMap(): Boolean {
-        for (pkg in listOf(
-            "com.autonavi.minimap.auto",   // 高德车机版
-            "com.baidu.BaiduMap.auto",     // 百度地图车机版
-            "com.autonavi.minimap",
-            "com.baidu.BaiduMap",
-        )) {
-            val intent = packageManager.getLaunchIntentForPackage(pkg)
-            if (intent != null) {
-                startActivity(intent)
-                return true
-            }
-        }
-        return false
-    }
 
     /** Circle entry button for the top bar. */
     private fun circleButton(label: String, onClick: () -> Unit): View =
@@ -1255,7 +1245,7 @@ class CarLifeVideoActivity : Activity() {
                         else -> ""
                     }
                     main.post {
-                        wTempText.text = "\${temp.toInt()}°"
+                        wTempText.text = "${temp.toInt()}°"
                         wDescText.text = desc
                     }
                 }
@@ -1311,7 +1301,6 @@ class CarLifeVideoActivity : Activity() {
         lyricIdx = -1
         lyricView.text = ""
         if (song.isBlank() || song == getString(R.string.media_unknown_song)) return
-        lyricLoading = true
         Thread {
             var lines: List<Pair<Long, String>> = emptyList()
             runCatching {
@@ -1334,7 +1323,6 @@ class CarLifeVideoActivity : Activity() {
                 }
             }
             main.post {
-                lyricLoading = false
                 lyricLines = lines
                 lyricIdx = -1
                 lyricView.text = if (lines.isEmpty()) "暂无歌词" else ""
@@ -1631,9 +1619,20 @@ class CarLifeVideoActivity : Activity() {
         }
     }
 
-    private fun renderSpeed(kmh: Int, source: String) {
-        statusSpeed.text = "$kmh km/h"
-        statusGear.text = if (kmh == 0) "P" else "D"
+    /**
+     * Two speed sources feed the cluster (the unit's own GPS and the phone's
+     * CarLife GPS). Publishing whichever updated last stops the readout from
+     * flicking between two different values.
+     */
+    private fun renderSpeed() {
+        val useUnit = unitKmh >= 0 && (unitGpsAt >= lastGpsAt || phoneKmh < 0)
+        val kmh = if (useUnit) unitKmh else phoneKmh
+        statusSpeed.text = if (kmh >= 0) "$kmh km/h" else "-- km/h"
+        statusGear.text = when {
+            kmh < 0 -> "--"
+            kmh == 0 -> "P"
+            else -> "D"
+        }
     }
 
     private fun takeScreenshot() {
@@ -1840,16 +1839,16 @@ class CarLifeVideoActivity : Activity() {
                         if (tripAnchorValid) {
                             tripKmText.text = String.format("%.1f", tripMeters / 1000f)
                             val mins = (System.currentTimeMillis() - tripStartAt) / 60000
-                            tripDurText.text = " km · \${mins}分钟"
+                            tripDurText.text = " km · ${mins}分钟"
                         }
                         gpsText.text =
-                            if (gps.fix > 0) "GPS·\${gps.satsUsed}星 LOCK" else "GPS·----"
+                            if (gps.fix > 0) "GPS·${gps.satsUsed}星 LOCK" else "GPS·----"
                         if (gps.fix > 0 && !weatherFetched && gps.latitude != 0) {
                             weatherFetched = true
                             fetchWeather(lat, lng)
                         }
                         phoneKmh = (gps.speedCms * 36.0 / 1000.0).roundToInt()
-                        renderSpeed(phoneKmh, "GPS")
+                        renderSpeed()
                         CarLifeSessionLog.log(
                             this@CarLifeVideoActivity, "GPS",
                             "phone=${phoneKmh}kmh sats=${gps.satsUsed} fix=${gps.fix} head=${gps.heading}",
@@ -1870,7 +1869,7 @@ class CarLifeVideoActivity : Activity() {
                         // the whole screen automatically.
                         if (starting && screenMode == MODE_DASH) applyScreenMode(MODE_MAP)
                         stripDist.text =
-                            if (info.remainDistance > 0) "\${info.remainDistance}米" else ""
+                            if (info.remainDistance > 0) "${info.remainDistance}米" else ""
                         stripRoad.text = info.roadName
                         stripArrow.text = turnArrow(info.nextTurn)
                         naviPillText?.text = buildString {
@@ -1917,7 +1916,6 @@ class CarLifeVideoActivity : Activity() {
                 setStage(getString(R.string.carlife_disconnected, detail ?: ""))
                 startupRetryButton?.visibility = View.VISIBLE
                 mapAutoLaunched = false
-                lastProgressPct = -1
                 if (screenMode != MODE_DASH) applyScreenMode(MODE_DASH)
             }
 

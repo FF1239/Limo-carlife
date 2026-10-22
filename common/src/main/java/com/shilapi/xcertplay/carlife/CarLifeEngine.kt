@@ -480,7 +480,6 @@ class CarLifeEngine(
     }
 
     override fun onMediaInfo(info: CarLifeMessages.MediaInfo) {
-        lastMediaInfo = info
         Log.i("CarLifeLog", "MEDIA: song=${info.song} artist=${info.artist} dur=${info.duration} src=${info.source.take(20)}")
         CarLifeNaviWidget.updateMedia(
             context, info.song.ifBlank { "" }, info.artist.ifBlank { "" },
@@ -492,14 +491,10 @@ class CarLifeEngine(
         // Observed live: the phone sends a 0..10000 scale (7040 == 70.4%).
         val pct = (percent / 100).coerceIn(0, 100)
         Log.i("CarLifeLog", "MEDIA: progress raw=$percent -> $pct")
-        lastProgressPct = pct
         uiListener.onMediaProgress(pct)
     }
 
     // ---- media play-state mirror (session publish unavailable: stripped jar) ----
-
-    private var lastMediaInfo: CarLifeMessages.MediaInfo? = null
-    private var lastProgressPct = 0
 
     @Volatile
     private var mediaPlaying = false
@@ -700,6 +695,9 @@ class CarLifeEngine(
         }
     }
 
+    /** Last granted focus request; Android requires the same object to release it. */
+    private var focusRequest: android.media.AudioFocusRequest? = null
+
     /** Take media focus so the car's own player ducks/pauses (head-unit correctness). */
     private fun requestAudioFocus() {
         val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -721,11 +719,15 @@ class CarLifeEngine(
             )
             .setOnAudioFocusChangeListener(focusListener)
             .build()
+        focusRequest = request
         runCatching { audioManager.requestAudioFocus(request) }
     }
 
     private fun abandonAudioFocus() {
-        runCatching { audioManager.abandonAudioFocus(null) }
+        // abandonAudioFocus(listener) does not match a request made with an
+        // AudioFocusRequest — the focus would never actually be given back.
+        focusRequest?.let { runCatching { audioManager.abandonAudioFocusRequest(it) } }
+        focusRequest = null
     }
 
     // ---- mic uplink (VR) ----
