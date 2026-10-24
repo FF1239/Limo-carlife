@@ -104,6 +104,10 @@ class CarLifeSession(
     @Volatile
     var cmdLogger: ((serviceType: Int, payloadLen: Int) -> Unit)? = null
 
+    /** Optional hook: protocol lifecycle notes (RSA/AES handshake) for the session log. */
+    @Volatile
+    var eventLogger: ((message: String) -> Unit)? = null
+
     /** RSA private key for the active session, set on MD_RSA_PUBLIC_KEY_REQUEST. */
     private var rsaPrivateKey: PrivateKey? = null
 
@@ -196,10 +200,13 @@ class CarLifeSession(
         )
     }
 
-    /** VR uplink audio (1KB per packet in the reference implementation). */
+    /** VR uplink audio (1KB per packet in the reference implementation).
+     *  Never sealed: the reference writes VR mic data through the raw byte[]
+     *  path — stream channels stay plaintext even when the session is
+     *  encrypted (only CMD and TOUCH go through the encrypted path). */
     fun sendVrData(pcm: ByteArray, timestamp: Long = 0) {
         transport.write(
-            CarLifeFrame.pack(CarLife.CHANNEL_VR, CarLife.Stream.VR_DATA.toLong(), seal(pcm), timestamp),
+            CarLifeFrame.pack(CarLife.CHANNEL_VR, CarLife.Stream.VR_DATA.toLong(), pcm, timestamp),
         )
     }
 
@@ -225,7 +232,10 @@ class CarLifeSession(
 
     /** RSA/AES encryption handshake responses. */
     fun sendRsaPublicKey(base64PublicKey: String) {
-        sendCmd(CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST, CarLifeMessages.RsaPublicKey(base64PublicKey).encode())
+        // The phone asked for our key; the answer must carry HU_RSA_PUBLIC_KEY_RESPONSE
+        // (0x0001806B) — the request id 0x0001006A is phone->HU only and the
+        // phone ignores a key delivered under it (reference ConnectSocket flow).
+        sendCmd(CarLife.Cmd.HU_RSA_PUBLIC_KEY_RESPONSE, CarLifeMessages.RsaPublicKey(base64PublicKey).encode())
     }
 
     // ---- RSA/AES session crypto (real CarLife path) ----
@@ -234,20 +244,26 @@ class CarLifeSession(
         val (pub, priv) = CarLifeCrypto.ensureKeyPair()
         rsaPrivateKey = priv
         sendRsaPublicKey(pub)
+        eventLogger?.invoke("rsa public key served (${pub.length} b64 chars)")
     }
 
     private fun handleAesKeyDelivered(encryptedKey: String) {
         val priv = rsaPrivateKey ?: run {
-            println("CarLifeSession: AES key delivered but no RSA private key held")
+            eventLogger?.invoke("aes key delivered but no rsa private key held")
             return
         }
         val key = CarLifeCrypto.rsaDecryptToBytes(priv, encryptedKey)
         if (key == null) {
-            println("CarLifeSession: AES session key RSA decrypt failed")
+            eventLogger?.invoke("aes session key rsa decrypt failed (${encryptedKey.length} b64 chars)")
             return
         }
         aesKey = key
-        println("CarLifeSession: AES session key established (${key.size} bytes)")
+        eventLogger?.invoke("aes session key established (${key.size} bytes); cmd/touch sealed")
+        // ACK the phone before it flips its own encrypt switch: the reference HU
+        // answers HU_AES_REC_RESPONSE immediately after storing the key; without
+        // it the phone keeps expecting plaintext while we already seal, and
+        // every HU->phone CMD (hard keys, launch modes) is silently discarded.
+        sendCmd(CarLife.Cmd.HU_AES_REC_RESPONSE, ByteArray(0))
     }
 
     /** Encrypt an outbound payload once the AES session key exists. */
@@ -281,6 +297,9 @@ class CarLifeSession(
     fun sendLaunchMode(serviceType: Int) = sendCmd(serviceType, ByteArray(0))
 
     fun close(reason: String = "closed") {
+        // Idempotent: protocol errors, the watchdog and transport teardown can
+        // all race here — onDisconnect must fire exactly once.
+        if (phase == Phase.CLOSED) return
         phase = Phase.CLOSED
         listener.onDisconnect(reason)
         transport.close()
@@ -303,9 +322,11 @@ class CarLifeSession(
     }
 
     private fun dispatch(f: CarLifeFrame.Parsed) {
-        // Once the AES session key is established the phone encrypts every
-        // inbound message payload; transparently decrypt before dispatch.
-        val p = unseal(f.payload)
+        // Only the CMD channel is encrypted in both directions (reference
+        // EncryptSetupManager/AESManager guard the CarlifeCmdMessage paths);
+        // video/music/tts/vr arrive plaintext, so a per-frame unseal attempt
+        // there would just burn a failed PKCS5 decrypt on every frame.
+        val p = if (f.channel == CarLife.CHANNEL_CMD) unseal(f.payload) else f.payload
         when (f.channel) {
             CarLife.CHANNEL_CMD -> dispatchCmd(f.serviceType, p)
             CarLife.CHANNEL_VIDEO -> when (f.serviceType.toInt()) {
@@ -367,6 +388,10 @@ class CarLifeSession(
             CarLife.Cmd.MIC_RECORD_END -> listener.onMicRecordEnd()
             CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST -> handleRsaPublicKeyRequest()
             CarLife.Cmd.MD_AES_KEY_SEND_REQUEST -> handleAesKeyDelivered(CarLifeMessages.AesKey.decode(payload).aesKey)
+            // Phone confirms the encrypted channel is up. The reference HU
+            // (re)starts the video codec negotiation here; this build already
+            // proposed the canvas at authen time and the phone accepted it.
+            CarLife.Cmd.MD_ENCRYPT_READY -> eventLogger?.invoke("md encrypt ready")
             CarLife.Cmd.CAR_GPS -> listener.onCarGps(CarLifeMessages.CarGps.decode(payload))
             CarLife.Cmd.CAR_VELOCITY -> listener.onCarVelocity(CarLifeMessages.CarSpeed.decode(payload))
             else -> listener.onUnknownCmd(serviceType.toInt(), payload.size)

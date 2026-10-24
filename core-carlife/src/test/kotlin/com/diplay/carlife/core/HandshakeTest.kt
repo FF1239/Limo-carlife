@@ -6,7 +6,7 @@ import org.junit.Test
 
 class HandshakeTest {
 
-    private class RecordingListener : CarLifeSession.Listener {
+    private open class RecordingListener : CarLifeSession.Listener {
         val phases = ArrayList<CarLifeSession.Phase>()
         var versionMatchStatus: Int? = null
         var encoderInitDone: CarLifeMessages.VideoEncoderInfo? = null
@@ -166,5 +166,86 @@ class HandshakeTest {
         assertEquals(1, list.statuses.size)
         assertEquals(CarLife.Module.MIC, list.statuses[0].moduleId)
         assertEquals(CarLife.MIC_STATUS_USE_MOBILE_MIC, list.statuses[0].statusId)
+    }
+
+    // ---- RSA/AES encryption handshake (reference EncryptSetupManager flow) ----
+
+    private fun loadPublicKey(base64: String): java.security.PublicKey {
+        val spec = java.security.spec.X509EncodedKeySpec(
+            java.util.Base64.getDecoder().decode(base64),
+        )
+        return java.security.KeyFactory.getInstance("RSA").generatePublic(spec)
+    }
+
+    @Test
+    fun `rsa and aes handshake - reply ids, ack, and channel sealing`() {
+        val transport = LoopbackTransport()
+        val session = CarLifeSession(transport, RecordingListener())
+
+        // phone asks for the HU RSA public key; the answer must carry the
+        // RESPONSE id (0x0001806B), not the request id the phone sent
+        session.feedMobile(CarLife.CHANNEL_CMD, CarLife.Cmd.MD_RSA_PUBLIC_KEY_REQUEST, ByteArray(0))
+        val keyReply = CarLifeFrame.Splitter().feed(transport.written[0]).single()
+        assertEquals(CarLife.Cmd.HU_RSA_PUBLIC_KEY_RESPONSE.toLong(), keyReply.serviceType)
+        var pubB64 = ""
+        val kr = ProtoReader(keyReply.payload)
+        var kf = kr.nextField()
+        while (kf != 0) {
+            when (kf) { 1 -> pubB64 = kr.readString(); else -> kr.skip() }
+            kf = kr.nextField()
+        }
+
+        // phone seals its AES key with the HU public key (RSA/PKCS1, Base64)
+        val aesKey = "0123456789abcdef".toByteArray(Charsets.US_ASCII)
+        val cipher = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, loadPublicKey(pubB64))
+        val encrypted = java.util.Base64.getEncoder().encodeToString(cipher.doFinal(aesKey))
+        val aesKeyPayload = ProtoWriter().writeString(1, encrypted).toByteArray()
+        session.feedMobile(
+            CarLife.CHANNEL_CMD,
+            CarLife.Cmd.MD_AES_KEY_SEND_REQUEST,
+            aesKeyPayload,
+        )
+
+        // the phone waits for HU_AES_REC_RESPONSE before trusting the channel;
+        // the ACK itself is already sealed with the new key
+        val ack = CarLifeFrame.Splitter().feed(transport.written[1]).single()
+        assertEquals(CarLife.Cmd.HU_AES_REC_RESPONSE.toLong(), ack.serviceType)
+        assertArrayEquals(
+            ByteArray(0),
+            CarLifeCrypto.aesDecrypt(aesKey, ack.payload),
+        )
+
+        // stream channels stay plaintext: VR mic uplink is raw
+        session.sendVrData(byteArrayOf(9, 8, 7))
+        val vr = CarLifeFrame.Splitter().feed(transport.written[2]).single()
+        assertArrayEquals(byteArrayOf(9, 8, 7), vr.payload)
+
+        // CMD/TOUCH are sealed: decrypting the hard key frame yields the message
+        session.sendHardKey(CarLife.HardKey.SELECTOR_NEXT)
+        val keyFrame = CarLifeFrame.Splitter().feed(transport.written[3]).single()
+        assertEquals(CarLife.Stream.TOUCH_CAR_HARD_KEY_CODE.toLong(), keyFrame.serviceType)
+        val plain = CarLifeCrypto.aesDecrypt(aesKey, keyFrame.payload)!!
+        var keycode = -1
+        val r = ProtoReader(plain)
+        var f = r.nextField()
+        while (f != 0) {
+            when (f) { 1 -> keycode = r.readInt32(); else -> r.skip() }
+            f = r.nextField()
+        }
+        assertEquals(CarLife.HardKey.SELECTOR_NEXT, keycode)
+    }
+
+    @Test
+    fun `md encrypt ready is recognized not unknown`() {
+        val listener = object : RecordingListener() {
+            var unknownId = -1
+            override fun onUnknownCmd(id: Int, size: Int) {
+                unknownId = id
+            }
+        }
+        val session = CarLifeSession(LoopbackTransport(), listener)
+        session.feedMobile(CarLife.CHANNEL_CMD, CarLife.Cmd.MD_ENCRYPT_READY, ByteArray(0))
+        assertEquals(-1, listener.unknownId)
     }
 }

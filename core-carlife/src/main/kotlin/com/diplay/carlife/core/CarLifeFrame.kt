@@ -96,7 +96,7 @@ object CarLifeFrame {
                 val channel = head.int
                 val msgLen = head.int
                 if (channel < CarLife.CHANNEL_MIN || channel > CarLife.CHANNEL_MAX ||
-                    msgLen < CarLife.CHANNEL_HEADER_SIZE_CMD || msgLen > CarLife.MAX_MSG_BYTES
+                    msgLen < channelHeaderSize(channel) || msgLen > CarLife.MAX_MSG_BYTES
                 ) {
                     throw ProtocolException("invalid transport header: channel=$channel msgLen=$msgLen")
                 }
@@ -120,6 +120,14 @@ object CarLifeFrame {
                     timestamp = body.int.toLong() and 0xFFFFFFFFL
                 }
                 val serviceType = body.int.toLong() and 0xFFFFFFFFL
+                // A payload claiming more bytes than the frame carries must fail
+                // loudly: copyOfRange would silently zero-fill past the end.
+                val headerSize = channelHeaderSize(channel)
+                if (payloadLen < 0 || payloadLen > msgLen - headerSize) {
+                    throw ProtocolException(
+                        "payload length $payloadLen exceeds frame body $msgLen (header $headerSize)",
+                    )
+                }
                 // body.position() is absolute in `buffer` (wrap offset = header size)
                 val payloadStart = body.position()
                 val payload = buffer.copyOfRange(payloadStart, payloadStart + payloadLen)

@@ -128,6 +128,8 @@ object CarLife {
         const val MD_RSA_PUBLIC_KEY_REQUEST = 0x0001006A
         const val HU_RSA_PUBLIC_KEY_RESPONSE = 0x0001806B
         const val MD_AES_KEY_SEND_REQUEST = 0x0001006C
+        const val HU_AES_REC_RESPONSE = 0x0001806D
+        const val MD_ENCRYPT_READY = 0x0001006E
     }
 
     /** Non-CMD channel service types. */

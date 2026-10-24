@@ -105,6 +105,7 @@ class ProtoReader(private val buf: ByteArray, private val start: Int = 0, privat
 
     fun readString(): String {
         val len = readVarint().toInt()
+        checkLengthDelimited(len)
         val s = String(buf, pos, len, Charsets.UTF_8)
         pos += len
         return s
@@ -112,9 +113,19 @@ class ProtoReader(private val buf: ByteArray, private val start: Int = 0, privat
 
     fun readBytes(): ByteArray {
         val len = readVarint().toInt()
+        checkLengthDelimited(len)
         val copy = buf.copyOfRange(pos, pos + len)
         pos += len
         return copy
+    }
+
+    /** A truncated or hostile length must fail loudly, not silently zero-fill. */
+    private fun checkLengthDelimited(len: Int) {
+        if (len < 0 || len > end - pos) {
+            throw ProtocolException(
+                "length-delimited field overruns buffer: len=$len remaining=${end - pos}",
+            )
+        }
     }
 
     fun readDouble(): Double {
