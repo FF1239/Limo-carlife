@@ -4,6 +4,8 @@ import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import com.diplay.carlife.core.CarLife
+import com.shilapi.xcertplay.carlife.CarLifeHomeActivity
 import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -19,31 +21,35 @@ import org.xmlpull.v1.XmlPullParser
 @Config(sdk = [29])
 class UsbDeviceFilterTest {
     @Test
-    fun iphoneProductsMatchTheActivityAttachFilter() {
-        for (productId in listOf(0x12a8, 0x12a9, 0xffff)) {
+    fun carlifeAccessoryPidsMatchTheAttachFilter() {
+        for (productId in 0x2D00..0x2D05) {
             assertTrue(
-                "Apple product 0x${productId.toString(16)} must match the attach filter",
+                "AOA accessory 0x${productId.toString(16)} must match the attach filter",
+                matchesAttachFilter(CarLife.AOA_VID_ACCESSORY, productId),
+            )
+        }
+    }
+
+    @Test
+    fun appleIphoneDoesNotMatchTheAttachFilter() {
+        for (productId in listOf(0x12a8, 0x12a9, 0xffff)) {
+            assertFalse(
+                "Apple product 0x${productId.toString(16)} must not match the attach filter",
                 matchesAttachFilter(IphoneUsbMatcher.APPLE_VENDOR_ID, productId),
             )
         }
     }
 
     @Test
-    fun ch341StillMatchesOnlyItsConfiguredProduct() {
-        assertTrue(matchesAttachFilter(0x1a86, 0x5512))
-        assertFalse(matchesAttachFilter(0x1a86, 0x5513))
-    }
-
-    @Test
     fun unrelatedUsbVendorsDoNotMatch() {
-        assertFalse(matchesAttachFilter(0x1234, 0x12a8))
-        assertFalse(matchesAttachFilter(0x1234, 0x5512))
+        assertFalse(matchesAttachFilter(0x1234, 0x2D01))
+        assertFalse(matchesAttachFilter(0x1a86, 0x5512))
     }
 
     private fun matchesAttachFilter(vendorId: Int, productId: Int): Boolean {
         val context = RuntimeEnvironment.getApplication()
         val activity = context.packageManager.getActivityInfo(
-            ComponentName(context, CarPlayHostActivity::class.java),
+            ComponentName(context, CarLifeHomeActivity::class.java),
             PackageManager.GET_META_DATA,
         )
         val device = Mockito.mock(UsbDevice::class.java)
