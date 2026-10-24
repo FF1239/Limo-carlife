@@ -62,6 +62,11 @@ class TcpChannelTransport(
     @Volatile
     private var running = false
 
+    // Throttle timestamps for the per-instance drop/proof-of-life logs. These
+    // were companion statics once, which made instances throttle each other.
+    private var lastDropLogAt = 0L
+    private var lastTouchOkLogAt = 0L
+
     /**
      * Outbound frame queue drained by a single writer thread. Touch and
      * hard-key frames are sent from the UI thread — writing to a socket there
@@ -69,8 +74,11 @@ class TcpChannelTransport(
      * I/O), which silently killed every touch before this queue existed. A
      * single writer also serializes per-channel output so frames from
      * different threads can never interleave mid-frame.
+     *
+     * Bounded: if the phone stops draining, an unbounded queue is a memory
+     * leak. Overflow policy is per channel — see [write].
      */
-    private val writeQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+    private val writeQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>(WRITE_QUEUE_CAPACITY)
 
     fun start() {
         running = true
@@ -226,23 +234,44 @@ class TcpChannelTransport(
 
     /** Enqueues a full CarLife frame; the writer thread delivers it to the channel socket. */
     override fun write(frame: ByteArray) {
-        writeQueue.put(frame)
+        if (writeQueue.offer(frame)) return
+        // Queue full: the phone stopped draining. Per-channel policy keeps
+        // memory bounded without killing more than the channel deserves.
+        when (frameChannel(frame)) {
+            CarLife.CHANNEL_TOUCH -> logWriteDropped("touch frame dropped: write queue full")
+            CarLife.CHANNEL_CMD ->
+                // The CMD frames carry the session itself; a full queue means
+                // the phone is effectively gone — escalate to a full reconnect.
+                listener.onClosed("cmd write queue full (${WRITE_QUEUE_CAPACITY} frames)")
+            else -> {
+                // Media channels: the oldest queued frame is stale anyway.
+                writeQueue.poll()
+                if (!writeQueue.offer(frame)) logWriteDropped("frame dropped: write queue full")
+            }
+        }
+    }
+
+    private fun frameChannel(frame: ByteArray): Int =
+        ((frame[0].toInt() and 0xFF) shl 24) or ((frame[1].toInt() and 0xFF) shl 16) or
+            ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+
+    private fun logWriteDropped(message: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastDropLogAt > 1000) {
+            lastDropLogAt = now
+            android.util.Log.w("CarLifeLog", message)
+        }
     }
 
     /** Runs on the writer thread only: routes one frame to its channel socket. */
     private fun routeWrite(frame: ByteArray) {
         if (frame.size < 8) return
-        val channel = ((frame[0].toInt() and 0xFF) shl 24) or ((frame[1].toInt() and 0xFF) shl 16) or
-            ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+        val channel = frameChannel(frame)
         val c = channels.firstOrNull { it.id == channel } ?: return
         val out = c.output ?: run {
             // Silent drops here are how touch/hardkey input "dies" invisibly:
             // log (throttled) so a dead channel is visible in the session log.
-            val now = System.currentTimeMillis()
-            if (now - lastDropLogAt > 1000) {
-                lastDropLogAt = now
-                android.util.Log.w("CarLifeLog", "write dropped: channel $channel not open (${frame.size}B)")
-            }
+            logWriteDropped("write dropped: channel $channel not open (${frame.size}B)")
             return
         }
         try {
@@ -274,7 +303,7 @@ class TcpChannelTransport(
         /** In-place retries per non-CMD channel before escalating to a full reconnect. */
         private const val CHANNEL_SELFHEAL_ATTEMPTS = 2
 
-        private var lastDropLogAt = 0L
-        private var lastTouchOkLogAt = 0L
+        /** Mostly small TOUCH/CMD frames; 64 covers seconds of traffic. */
+        private const val WRITE_QUEUE_CAPACITY = 64
     }
 }

@@ -32,11 +32,16 @@ object SubnetScanner {
     fun findPhone(onFound: (InetAddress) -> Unit, onDone: () -> Unit): Thread {
         return thread(name = "carlife-scan") {
             var reported = false
+            // Once the phone is found the remaining workers must stop probing:
+            // letting all 16 drain the /24 costs seconds for nothing and keeps
+            // radio + threads busy after the hit.
+            val stop = java.util.concurrent.atomic.AtomicBoolean(false)
             val lock = Any()
             fun report(found: Boolean, addr: InetAddress?) {
                 synchronized(lock) {
                     if (reported) return
                     reported = true
+                    stop.set(true)
                     if (found && addr != null) {
                         Log.i(TAG, "CarLife phone found at ${addr.hostAddress}")
                         onFound(addr)
@@ -50,6 +55,7 @@ object SubnetScanner {
                 val workers = List(16) { index ->
                     thread(name = "carlife-probe-$index") {
                         while (true) {
+                            if (stop.get()) return@thread
                             val addr = queue.poll() ?: break
                             if (probe(addr)) {
                                 report(true, addr)

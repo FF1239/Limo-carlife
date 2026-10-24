@@ -112,8 +112,10 @@ class AoaTransport(
     @SuppressLint("MutableImplicitPendingIntent")
     private fun scan() {
         listener.onState(State.SCANNING)
-        val device = usbManager.deviceList.values.firstOrNull { !isPhone(it) } ?: run {
-            listener.onState(State.SCANNING, "no usb device")
+        // findCarLifeCandidate skips mass-storage devices: a USB stick left in
+        // the head unit must not be asked for as if it were the phone.
+        val device = findCarLifeCandidate(usbManager.deviceList.values) ?: run {
+            listener.onState(State.SCANNING, "no carlife usb device")
             return
         }
         currentDevice = device
