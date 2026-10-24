@@ -354,9 +354,21 @@ class CarLifeEngine(
     @Volatile
     private var decodedSinceArm = 0L
 
+    /**
+     * Consecutive empty watchdog windows tolerated before killing the session.
+     * One window (12s) is not enough right after connect: a CarWith phone
+     * waits on the user's on-screen projection consent before its encoder
+     * surface binds, and killing at 12s yanks the consent dialog's target
+     * away mid-tap (observed live 2026-10-24: three 12s connect/kill cycles).
+     * Three windows ≈ 36s of grace; a stream that dies later still trips on
+     * the first empty window because videoHasEverFlown resets the allowance.
+     */
+    private var emptyWindowsAllowed = 3
+
     private fun armStreamWatchdog() {
         videoPacketsSinceArm = 0
         decodedSinceArm = 0
+        emptyWindowsAllowed = 3
         scheduleWatchdogCheck()
     }
 
@@ -372,11 +384,17 @@ class CarLifeEngine(
                 return@postDelayed
             }
             if (videoPacketsSinceArm == 0L || decodedSinceArm == 0L) {
+                if (emptyWindowsAllowed > 0) {
+                    emptyWindowsAllowed--
+                    scheduleWatchdogCheck()
+                    return@postDelayed
+                }
                 emitState("watchdog", "no video flowing")
                 session?.close("watchdog: no video flowing")
             } else {
                 videoPacketsSinceArm = 0
                 decodedSinceArm = 0
+                emptyWindowsAllowed = 0
                 scheduleWatchdogCheck()
             }
         }, STREAM_WATCHDOG_MS)
