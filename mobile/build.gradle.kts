@@ -17,8 +17,13 @@ android {
         applicationId = "com.shihab.diplay.cn"
         minSdk = 28
         targetSdk = 37
-        versionCode = 82
-        versionName = "1.0.0"
+        // Version comes from the build so delivered APKs stop all reporting
+        // versionCode=82/"1.0.0" (27 historical builds shared one identity,
+        // making in-app update comparison impossible). Defaults keep plain
+        // `gradlew assemble` reproducible; releases pass
+        // -PversionCode= -PversionName= (see DELIVERY.md).
+        versionCode = (providers.gradleProperty("versionCode").orNull?.toIntOrNull()) ?: 82
+        versionName = providers.gradleProperty("versionName").orNull ?: "1.0.0"
 
     }
 
