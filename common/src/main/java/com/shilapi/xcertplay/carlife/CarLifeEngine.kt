@@ -54,9 +54,17 @@ class CarLifeEngine(
     enum class Mode { WIRED, WIRELESS }
 
     private var mode: Mode = Mode.WIRED
+
+    @Volatile
     private var aoa: AoaTransport? = null
+
+    @Volatile
     private var tcp: TcpChannelTransport? = null
-    private var session: CarLifeSession? = null    // ---- video ----
+
+    // Read/written from session reader threads, the mic thread and the UI
+    // thread; onClosed paths null it from whichever transport thread failed.
+    @Volatile
+    private var session: CarLifeSession? = null // ---- video ----
     private var codec: MediaCodec? = null
 
     /**
@@ -86,6 +94,7 @@ class CarLifeEngine(
     /** Last successful start parameters; reconnect reuses them verbatim. */
     private var lastMode: Mode = Mode.WIRED
     private var lastWirelessHost: java.net.InetAddress? = null
+    private var lastUsePanelSize = false
 
     private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -112,6 +121,9 @@ class CarLifeEngine(
     private var panelSizeRequested = false
 
     fun start(newMode: Mode, wirelessHost: java.net.InetAddress? = null, usePanelSize: Boolean = false) {
+        // An explicit start() is user intent: re-enable auto-reconnect even if
+        // a previous stop() on this engine instance disabled it.
+        userStopped = false
         panelSizeRequested = usePanelSize
         if (running) return
         running = true
@@ -119,11 +131,13 @@ class CarLifeEngine(
         mode = newMode
         lastMode = newMode
         lastWirelessHost = wirelessHost
+        lastUsePanelSize = usePanelSize
         when (mode) {
             Mode.WIRED -> {
                 val transport = AoaTransport(context, this)
                 aoa = transport
                 session = CarLifeSession(transport, this)
+                session?.eventLogger = { CarLifeSessionLog.log(context, "CRYPTO", it) }
                 transport.start()
                 emitState("scanning")
             }
@@ -136,6 +150,7 @@ class CarLifeEngine(
                 val transport = TcpChannelTransport(host, tcpListener)
                 tcp = transport
                 session = CarLifeSession(transport, this)
+                session?.eventLogger = { CarLifeSessionLog.log(context, "CRYPTO", it) }
                 transport.start()
                 emitState("wireless-connecting", host.hostAddress)
             }
@@ -195,6 +210,10 @@ class CarLifeEngine(
             // first phone-side reset.
             releaseVideo()
             releaseAudio()
+            // Dereference before closing: the surviving channels must not keep
+            // feeding (or writing through) a session whose CMD socket is gone.
+            session?.close(reason)
+            session = null
             if (running && !userStopped) {
                 scheduleReconnect(reason)
             } else {
@@ -255,6 +274,11 @@ class CarLifeEngine(
     override fun onClosed(reason: String) {
         releaseVideo()
         releaseAudio()
+        // Same as the TCP path: the session must not outlive its transport.
+        // close() is idempotent, so the re-entrant transport.close() inside it
+        // is safe.
+        session?.close(reason)
+        session = null
         scheduleReconnect(reason)
         emitState("disconnected", reason)
     }
@@ -280,7 +304,10 @@ class CarLifeEngine(
             tcp = null
             session = null
             running = false
-            start(lastMode, lastWirelessHost)
+            // Preserve the negotiated canvas: without usePanelSize the retry
+            // falls back to the 1280x720 whitelist size and the user's
+            // resolution pick silently reverts after every reconnect.
+            start(lastMode, lastWirelessHost, lastUsePanelSize)
         }, delayMs)
     }
 
@@ -327,6 +354,13 @@ class CarLifeEngine(
         watchdog.removeCallbacksAndMessages(null)
         watchdog.postDelayed({
             if (!running) return@postDelayed
+            if (videoPaused) {
+                // Frame frozen by request: no decodes happen, so the counters
+                // cannot move — hold the watchdog instead of reading it, or a
+                // long pause reads as a dead stream and kills the session.
+                scheduleWatchdogCheck()
+                return@postDelayed
+            }
             if (videoPacketsSinceArm == 0L || decodedSinceArm == 0L) {
                 emitState("watchdog", "no video flowing")
                 session?.close("watchdog: no video flowing")

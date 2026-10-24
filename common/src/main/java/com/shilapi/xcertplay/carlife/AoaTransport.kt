@@ -181,12 +181,19 @@ class AoaTransport(
         }
     }
 
+    /**
+     * Serializes writes: sendCmd (session reader thread), sendTouchAction (UI
+     * thread) and sendVrData (mic thread) all land here, and concurrent
+     * bulkTransfer on one endpoint would interleave mid-frame.
+     */
+    private val writeLock = Any()
+
     /** Sends the transport header and body as two separate bulk transfers. */
     override fun writeHeaded(head: ByteArray, body: ByteArray) {
         sendBulk(head, body)
     }
 
-    private fun sendBulk(head: ByteArray, body: ByteArray): Boolean {
+    private fun sendBulk(head: ByteArray, body: ByteArray): Boolean = synchronized(writeLock) {
         val conn = connection ?: return false
         val ep = endpointOut ?: return false
         if (head.isNotEmpty() && conn.bulkTransfer(ep, head, head.size, WRITE_TIMEOUT_MS) != head.size) return false
