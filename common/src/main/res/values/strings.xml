@@ -798,6 +798,8 @@ Basis:/n· Protocol — the CarLife link (connect, video, touch, audio) is imple
     <string name="settings_section_actions">Actions</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_screenshot">Screenshot</string>
+    <string name="action_freeze_video">Freeze picture</string>
+    <string name="action_resume_video">Resume picture</string>
     <string name="carlife_wireless_hint">Keep the phone on the same Wi-Fi, open Baidu CarLife+ and tap Connect to head unit.</string>
     <string name="carlife_back_to_home">Back to Limo</string>
     <string name="open_settings_hint">Swipe down with %1$d fingers to open settings</string>

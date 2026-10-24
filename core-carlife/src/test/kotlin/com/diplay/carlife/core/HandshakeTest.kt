@@ -248,4 +248,22 @@ class HandshakeTest {
         session.feedMobile(CarLife.CHANNEL_CMD, CarLife.Cmd.MD_ENCRYPT_READY, ByteArray(0))
         assertEquals(-1, listener.unknownId)
     }
+
+    @Test
+    fun `module status list round trips with per-module states`() {
+        val bytes = CarLifeMessages.ModuleStatusList(
+            listOf(
+                CarLifeMessages.ModuleStatus(CarLife.Module.VR, CarLife.MODULE_STATUS_RUNNING),
+                CarLifeMessages.ModuleStatus(CarLife.Module.MIC, CarLife.MIC_STATUS_USE_MOBILE_MIC),
+                CarLifeMessages.ModuleStatus(CarLife.Module.MUSIC, CarLife.MODULE_STATUS_IDLE),
+            ),
+        ).encode()
+        val decoded = CarLifeMessages.ModuleStatusList.decode(bytes)
+        assertEquals(3, decoded.statuses.size)
+        assertEquals(CarLife.Module.VR, decoded.statuses[0].moduleId)
+        assertEquals(CarLife.MODULE_STATUS_RUNNING, decoded.statuses[0].statusId)
+        assertEquals(CarLife.Module.MIC, decoded.statuses[1].moduleId)
+        assertEquals(CarLife.MIC_STATUS_USE_MOBILE_MIC, decoded.statuses[1].statusId)
+        assertEquals(CarLife.MODULE_STATUS_IDLE, decoded.statuses[2].statusId)
+    }
 }

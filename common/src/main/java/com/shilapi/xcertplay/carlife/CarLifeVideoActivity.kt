@@ -1150,6 +1150,18 @@ class CarLifeVideoActivity : Activity() {
         ).apply { topMargin = dp(14) })
 
         content.addView(sectionHeader(getString(R.string.settings_section_actions)))
+        // Freeze/resume the projection: holds the phone's encoder and the last
+        // decoded frame. The label tracks the engine state on every tap.
+        content.addView(Button(this).apply {
+            isAllCaps = false
+            setTextColor(0xFFF2F4F7.toInt())
+            backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1E1E1E.toInt())
+            text = freezeLabel()
+            setOnClickListener {
+                engine?.setVideoPaused(!(engine?.isVideoPaused() ?: false))
+                text = freezeLabel()
+            }
+        })
         content.addView(settingsButton(getString(R.string.action_screenshot)) { takeScreenshot() })
         content.addView(settingsButton(getString(R.string.action_disconnect)) {
             closeSettingsMenu()
@@ -1194,6 +1206,13 @@ class CarLifeVideoActivity : Activity() {
         typeface = Typeface.DEFAULT_BOLD
         setPadding(0, dp(30), 0, 0)
     }
+
+    private fun freezeLabel(): String =
+        if (engine?.isVideoPaused() == true) {
+            getString(R.string.action_resume_video)
+        } else {
+            getString(R.string.action_freeze_video)
+        }
 
     private fun settingsButton(text: String, onClick: () -> Unit): Button = Button(this).apply {
         this.text = text

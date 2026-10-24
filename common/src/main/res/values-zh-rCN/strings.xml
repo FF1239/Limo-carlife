@@ -799,6 +799,8 @@
     <string name="settings_section_actions">操作</string>
     <string name="action_disconnect">断开连接</string>
     <string name="action_screenshot">截屏</string>
+    <string name="action_freeze_video">冻结画面</string>
+    <string name="action_resume_video">恢复画面</string>
     <string name="carlife_wireless_hint">保持手机与本机在同一 Wi-Fi，打开百度 CarLife+ 点击「连接到车机」。</string>
     <string name="carlife_back_to_home">返回 Limo 主页</string>
     <string name="open_settings_hint">用 %1$d 根手指下滑打开设置</string>

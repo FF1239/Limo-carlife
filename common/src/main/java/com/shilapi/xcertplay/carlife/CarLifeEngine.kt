@@ -255,15 +255,25 @@ class CarLifeEngine(
     // ---- video pause ----
 
     /**
-     * Freezes the projection: H.264 packets keep being consumed (the watchdog
-     * must not trip) but are not decoded, so the last frame stays on screen.
+     * Freezes the projection: the phone is asked to hold its encoder
+     * (VIDEO_ENCODER_PAUSE) and inbound frames are not decoded, so the last
+     * frame stays on screen; the watchdog holds too, so a long pause does not
+     * read as a dead stream. Resuming sends VIDEO_ENCODER_START and re-arms
+     * the watchdog — if the phone fails to restart the stream, the watchdog
+     * turns a frozen screen into a reconnect instead of leaving it stuck.
      */
     @Volatile
     private var videoPaused = false
 
     fun setVideoPaused(paused: Boolean) {
+        if (videoPaused == paused) return
         videoPaused = paused
+        val s = session ?: return
+        if (paused) s.sendVideoEncoderPause() else s.sendVideoEncoderStart()
+        if (!paused) scheduleWatchdogCheck()
     }
+
+    fun isVideoPaused(): Boolean = videoPaused
 
     // ---- AoaTransport.Listener ----
 
@@ -522,8 +532,13 @@ class CarLifeEngine(
 
     override fun onModuleStatus(list: CarLifeMessages.ModuleStatusList) {
         // Phone VR module state drives the mic uplink per the reference flow.
+        // VRState is documented as idle/running, but its wire value has never
+        // been observed live: the old code guessed RUNNING == the VR module id
+        // (0x04). Accept either the enum position (1) or that guess, treat 0
+        // as idle, and log the raw value so a real session settles it.
         val vr = list.statuses.firstOrNull { it.moduleId == CarLife.Module.VR } ?: return
-        if (vr.statusId == CarLife.Module.VR /* RUNNING == module value in reference states */) {
+        Log.i("CarLifeLog", "MODULE_STATUS: vr statusId=${vr.statusId}")
+        if (vr.statusId == CarLife.MODULE_STATUS_RUNNING || vr.statusId == CarLife.Module.VR) {
             startMic()
         } else {
             stopMic()

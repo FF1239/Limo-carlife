@@ -203,6 +203,16 @@ object CarLife {
     const val MIC_STATUS_USE_MOBILE_MIC = 2
     const val MIC_STATUS_USE_VEHICLE_MIC = 3
 
+    /**
+     * MODULE_STATUS per-module states (docs/carlife-constants.md 模块状态值).
+     * Every module enum is IDLE=0 / RUNNING=1; MicState extends with the
+     * USE_* values above. The wire values have not been observed live yet —
+     * the engine logs the raw statusId on each VR status so a real session
+     * can confirm.
+     */
+    const val MODULE_STATUS_IDLE = 0
+    const val MODULE_STATUS_RUNNING = 1
+
     /** AOA identity strings written by USB control request 52 (index 0..5). */
     const val AOA_MANUFACTURER = "Baidu"
     const val AOA_MODEL_NAME = "CarLife"

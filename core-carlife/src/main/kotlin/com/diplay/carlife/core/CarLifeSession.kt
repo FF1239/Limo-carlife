@@ -108,6 +108,13 @@ class CarLifeSession(
     @Volatile
     var eventLogger: ((message: String) -> Unit)? = null
 
+    init {
+        // Crypto failures used to vanish into null returns; surface them on the
+        // session log (reads the current eventLogger on each call, so late
+        // assignment still works).
+        CarLifeCrypto.logger = { message -> eventLogger?.invoke(message) }
+    }
+
     /** RSA private key for the active session, set on MD_RSA_PUBLIC_KEY_REQUEST. */
     private var rsaPrivateKey: PrivateKey? = null
 
@@ -301,6 +308,11 @@ class CarLifeSession(
         // all race here — onDisconnect must fire exactly once.
         if (phase == Phase.CLOSED) return
         phase = Phase.CLOSED
+        // Record whether the session was ever encrypted: a session closed with
+        // aes established=false means the phone never delivered a key — the
+        // single most useful line when debugging a broken handshake on a car
+        // unit (unencrypted sessions are protocol-legal but suspicious).
+        eventLogger?.invoke("session closed ($reason); aes established=${aesKey != null}")
         listener.onDisconnect(reason)
         transport.close()
     }

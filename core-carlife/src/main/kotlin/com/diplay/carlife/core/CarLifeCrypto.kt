@@ -22,6 +22,14 @@ import javax.crypto.spec.SecretKeySpec
  * key). [rsaDecryptToBytes] therefore returns the decrypted bytes directly.
  */
 object CarLifeCrypto {
+    /**
+     * Optional failure sink (kept dependency-free like the rest of the library).
+     * Silent catches here used to make a broken AES handshake undiagnosable on
+     * a real device; the session wires this into its event logger.
+     */
+    @Volatile
+    var logger: ((message: String) -> Unit)? = null
+
     @Volatile
     private var pair: KeyPair? = null
 
@@ -45,6 +53,7 @@ object CarLifeCrypto {
         cipher.init(Cipher.DECRYPT_MODE, privateKey)
         cipher.doFinal(data)
     } catch (e: Exception) {
+        logger?.invoke("rsa decrypt failed: ${e.javaClass.simpleName}: ${e.message}")
         null
     }
 
@@ -54,6 +63,7 @@ object CarLifeCrypto {
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"))
         cipher.doFinal(data)
     } catch (e: Exception) {
+        logger?.invoke("aes decrypt failed: ${e.javaClass.simpleName}: ${e.message}")
         null
     }
 
@@ -63,6 +73,7 @@ object CarLifeCrypto {
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
         cipher.doFinal(data)
     } catch (e: Exception) {
+        logger?.invoke("aes encrypt failed: ${e.javaClass.simpleName}: ${e.message}")
         null
     }
 }
