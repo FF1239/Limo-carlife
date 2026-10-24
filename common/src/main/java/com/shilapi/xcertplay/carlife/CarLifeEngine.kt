@@ -354,6 +354,14 @@ class CarLifeEngine(
     @Volatile
     private var decodedSinceArm = 0L
 
+    // Feature-config exchange state: whether the phone's request was answered
+    // in the current session, and the proactive fallback for phones that
+    // never send one (older CarLife builds verified with the proactive flow).
+    @Volatile
+    private var featureConfigExchanged = false
+
+    private var featureFallback: Runnable? = null
+
     /**
      * Consecutive empty watchdog windows tolerated before killing the session.
      * One window (12s) is not enough right after connect: a CarWith phone
@@ -427,10 +435,14 @@ class CarLifeEngine(
     }
 
     override fun onAuthenResponse(response: com.diplay.carlife.core.CarLifeMessages.AuthenResponse) {
-        // Strict 4-step order, then feature answer and the encoder proposal;
-        // the sequence verified against real CarLife. BT OOB identity goes out
-        // only with a real adapter address (real CarLife+ stalls on an empty
-        // one; the verified desktop session sent no BT OOB at all).
+        // Strict 4-step order, then BT identity and the GNSS subscription.
+        // Feature config and the encoder proposal are NOT sent here: the
+        // CarWith phone runs its own FeatureConfigManager transaction and a
+        // response arriving before its request stalls it forever ("Wait for
+        // Feature Config Stop" observed live 2026-10-24 — three sessions, no
+        // video). Respond to the phone's request when it comes
+        // (onFeatureConfigRequest); phones that never ask fall back after
+        // FEATURE_CONFIG_FALLBACK_MS.
         session?.sendAuthenResult(true)
         val btAddress = try {
             android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.address ?: ""
@@ -440,20 +452,52 @@ class CarLifeEngine(
         if (btAddress.isNotEmpty()) {
             session?.sendHuBtOobInfo(btAddress, android.os.Build.MODEL)
         }
+        // Subscribe to the phone's GNSS module (0 = GPS, flag 1 = GCJ-02): the
+        // phone then streams CAR_GPS, giving the instruments a real speed.
+        session?.sendCarDataSubscribe(listOf(CarLifeMessages.VehicleInfo(MODULE_GPS_DATA, 1, 0)))
+        session?.sendCarDataSubscribeStart(MODULE_GPS_DATA)
+        featureConfigExchanged = false
+        featureFallback = Runnable {
+            if (!featureConfigExchanged && running) {
+                Log.w("CarLifeLog", "no feature config request; falling back to proactive init")
+                proposeVideoEncoder()
+            }
+        }
+        reconnectHandler.postDelayed(featureFallback!!, FEATURE_CONFIG_FALLBACK_MS)
+    }
+
+    override fun onFeatureConfigRequest(configs: List<CarLifeMessages.FeatureConfig>) {
+        // Echo every requested key as supported; VOICE_MIC follows the mic
+        // preference, FOCUS_UI is always on. Then propose the canvas — this
+        // is the reference phase 6, only valid after the exchange completes.
+        val answers = LinkedHashMap<String, Int>()
+        for (c in configs) {
+            answers[c.key] = when (c.key) {
+                CarLife.FEATURE_VOICE_MIC ->
+                    if (CarLifePersistence.get(context).micUplink()) {
+                        CarLife.MIC_STATUS_USE_MOBILE_MIC
+                    } else {
+                        CarLife.MIC_STATUS_USE_VEHICLE_MIC
+                    }
+                else -> 1
+            }
+        }
+        answers[CarLife.FEATURE_FOCUS_UI] = 1
+        session?.sendFeatureConfigResponse(answers.map { CarLifeMessages.FeatureConfig(it.key, it.value) })
+        featureConfigExchanged = true
+        featureFallback?.let { reconnectHandler.removeCallbacks(it) }
+        proposeVideoEncoder()
+    }
+
+    /** Phase 6: propose the canvas to the phone. */
+    private fun proposeVideoEncoder() {
         val p = CarLifePersistence.get(context)
-        session?.sendFeatureConfigResponse(
-            listOf(CarLifeMessages.FeatureConfig(CarLife.FEATURE_FOCUS_UI, 1)),
-        )
         if (panelSizeRequested) {
             session?.sendVideoEncoderInit(p.videoWidth(), p.videoHeight(), p.videoFrameRate())
         } else {
             // 1280x720: whitelist size, renders the full car UI uncropped.
             session?.sendVideoEncoderInit(1280, 720, p.videoFrameRate())
         }
-        // Subscribe to the phone's GNSS module (0 = GPS, flag 1 = GCJ-02): the
-        // phone then streams CAR_GPS, giving the instruments a real speed.
-        session?.sendCarDataSubscribe(listOf(CarLifeMessages.VehicleInfo(MODULE_GPS_DATA, 1, 0)))
-        session?.sendCarDataSubscribeStart(MODULE_GPS_DATA)
     }
 
     override fun onCarGps(gps: CarLifeMessages.CarGps) {
@@ -866,5 +910,8 @@ class CarLifeEngine(
 
         /** Encoder-init / video-flow watchdog window (live-testing: stalls). */
         private const val STREAM_WATCHDOG_MS = 12_000L
+
+        /** How long to wait for the phone's feature-config request before the proactive fallback. */
+        private const val FEATURE_CONFIG_FALLBACK_MS = 2_500L
     }
 }

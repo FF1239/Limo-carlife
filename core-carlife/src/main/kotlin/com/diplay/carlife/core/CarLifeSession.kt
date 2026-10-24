@@ -81,7 +81,17 @@ class CarLifeSession(
         fun onRsaPublicKeyRequest()
 
         /** Encryption handshake: mobile delivered an RSA-encrypted AES key. */
-        fun onAesKeyDelivered(encryptedKey: String)
+        fun onAesKeyDelivered(encryptedKey: String) {}
+
+        /**
+         * Feature-config exchange phase 5, phone-initiated: the phone asks
+         * which optional features the HU supports. The HU must answer
+         * [sendFeatureConfigResponse] — answering before the request stalls
+         * the phone's FeatureConfigManager ("Wait for Feature Config Stop"
+         * observed live on a CarWith phone 2026-10-24: the session never
+         * reaches video).
+         */
+        fun onFeatureConfigRequest(configs: List<CarLifeMessages.FeatureConfig>) {}
     }
 
     enum class Phase {
