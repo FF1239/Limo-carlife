@@ -41,3 +41,11 @@ release-signing.properties
 *.key
 *.apk
 *.aab
+
+# ICCOA/CarWith work ¡ª local only, never publish
+mobile/src/main/java/com/shilapi/xcertplay/carlife/iccoa/
+mobile/libs/iccar-sdk.dex
+mobile/libs/iccar-sdk-stubs.jar
+mobile/src/main/assets/ccd.data
+docs/iccoa-reference/
+mobile/src/main/jniLibs/
